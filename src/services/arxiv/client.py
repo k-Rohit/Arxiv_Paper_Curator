@@ -300,6 +300,175 @@ class ArxivClient:
           except Exception as e:
                logger.error(f"Failed to parse entry: {e}")
                return None
+     
+     def _get_text(self, element: ET.Element, path: str, clean_newlines: bool = False) -> str:
+        """
+        Extract text from XML element safely.
+
+        Args:
+            element: Parent XML element
+            path: XPath to find the text element
+            clean_newlines: Whether to replace newlines with spaces
+
+        Returns:
+            Extracted text or empty string
+        """
+        elem = element.find(path, self.namespaces)
+        if elem is None or elem.text is None:
+            return ""
+
+        text = elem.text.strip()
+        return text.replace("\n", " ") if clean_newlines else text
+   
+     def _get_arxiv_id(self, entry: ET.Element) -> Optional[str]:
+        """
+        Extract arXiv ID from entry.
+
+        Args:
+            entry: XML entry element
+
+        Returns:
+            arXiv ID or None
+        """
+        id_elem = entry.find("atom:id", self.namespaces)
+        if id_elem is None or id_elem.text is None:
+            return None
+        return id_elem.text.split("/")[-1]
+     
+     def _get_authors(self, entry: ET.Element) -> List[str]:
+        """
+        Extract author names from entry.
+
+        Args:
+            entry: XML entry element
+
+        Returns:
+            List of author names
+        """
+        authors = []
+        for author in entry.findall("atom:author", self.namespaces):
+            name = self._get_text(author, "atom:name")
+            if name:
+                authors.append(name)
+        return authors
+
+     def _get_categories(self, entry: ET.Element) -> List[str]:
           
+          """
+          Extract categories from entry.
 
+          Args:
+               entry: XML entry element
 
+          Returns:
+               List of category terms
+          """
+          categories = []
+          for category in entry.findall("atom:category",self.get_namespaces):
+               term = category.get("term")
+               if term:
+                    categories.append(term)
+          return categories
+     
+     def _get_pdf_url(self, entry: ET.Element) -> str:
+        """
+        Extract PDF URL from entry links.
+
+        Args:
+            entry: XML entry element
+
+        Returns:
+            PDF URL or empty string (always HTTPS)
+        """
+        for link in entry.findall("atom:link",self.get_namespaces):
+             if link.get("type") == "application/pdf":
+                  url = link.get("href","")
+                  if url.startswith("http://arxiv.org/"):
+                       url = url.replace("http://arxiv.org/","https://arxiv.org/")
+                  return url
+        return ""
+
+     async def download_pdf(self, paper: ArxivPaper, force_download: bool = False) -> Optional[Path]:
+        """
+        Download PDF for a given paper to local cache.
+
+        Args:
+            paper: ArxivPaper object containing PDF URL
+            force_download: Force re-download even if file exists
+
+        Returns:
+            Path to downloaded PDF file or None if download failed
+        """
+        if not paper.pdf_url:
+            logger.error(f"No PDF URL for paper {paper.arxiv_id}")
+            return None
+
+        pdf_path = self._get_pdf_path(paper.arxiv_id)
+
+        # Return cached PDF if exists
+        if pdf_path.exists() and not force_download:
+            logger.info(f"Using cached PDF: {pdf_path.name}")
+            return pdf_path
+
+        # Download with retry
+        if await self._download_with_retry(paper.pdf_url, pdf_path):
+            return pdf_path
+        else:
+            return None
+
+     def _get_pdf_path(self, arxiv_id: str) -> Path:
+        """
+        Get the local path for a PDF file.
+
+        Args:
+            arxiv_id: arXiv paper ID
+
+        Returns:
+            Path object for the PDF file
+        """
+        safe_filename = arxiv_id.replace("/", "_") + ".pdf"
+        return self.pdf_cache_dir / safe_filename
+   
+     async def _download_with_retry(self, url: str, path: Path, max_retries: Optional[int]=None) -> bool:
+          """ Download a file with the retry logic """
+          if max_retries is None:
+               max_retries = self._settings.download_max_retries
+          logger.info(f"Downloading PDF from {url}")
+          # Respect rate limits
+          await asyncio.sleep(self.rate_limit_delay)
+          for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=float(self.timeout_seconds)) as client:
+                    async with client.stream("GET", url) as response:
+                        response.raise_for_status()
+                        with open(path, "wb") as f:
+                            async for chunk in response.aiter_bytes():
+                                f.write(chunk)
+                logger.info(f"Successfully downloaded to {path.name}")
+                return True
+            except httpx.TimeoutException as e:
+                if path.exists():
+                      path.unlink()
+                if attempt < max_retries - 1:
+                    wait_time = self._settings.download_retry_delay_base * (attempt + 1)
+                    logger.warning(f"PDF download timeout (attempt {attempt + 1}/{max_retries}): {e}")
+                    logger.info(f"Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"PDF download failed after {max_retries} attempts due to timeout: {e}")
+                    raise PDFDownloadTimeoutError(f"PDF download timed out after {max_retries} attempts: {e}")
+            except httpx.HTTPError as e:
+                if path.exists(): 
+                     path.unlink()
+                if attempt < max_retries - 1:
+                    wait_time = self._settings.download_retry_delay_base * (attempt + 1)  # Exponential backoff
+                    logger.warning(f"Download failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    logger.info(f"Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"Failed after {max_retries} attempts: {e}")
+                    raise PDFDownloadException(f"PDF download failed after {max_retries} attempts: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected download error: {e}")
+                raise PDFDownloadException(f"Unexpected error during PDF download: {e}")
+          return False

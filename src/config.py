@@ -48,3 +48,9 @@ class ArxivSettings(BaseConfigSettings):
     def validate_cache_dir(cls, v: str) -> str:
         os.makedirs(v, exist_ok=True)
         return v
+
+class Settings(BaseConfigSettings):
+    arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
+    
+def get_settings() -> Settings:
+    return Settings()

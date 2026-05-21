@@ -14,4 +14,22 @@ from src.schemas.pdf_parser.models import PaperFigure, PaperSection, PaperTable,
 
 logger = logging.getLogger(__name__)
 
+class DoclingParser:
+     """Docling PDF parser for scientific document processing."""
+     def __init__(self,max_pages: int, max_file_size_mb: int, do_ocr: bool = False, do_table_structure: bool = True):
+        """ 
+        Initialize DocumentConverter with optimized pipeline options.
+        
+        :param max_pages: Maximum number of pages to process
+        :param max_file_size_mb: Maximum file size in MB
+        :param do_ocr: Enable OCR for scanned PDFs (default: False, very slow)
+        :param do_table_structure: Extract table structures (default: True)
+        """
+        
+        # Configure pipeline options - 
+        pipeline_options = PdfPipelineOptions(
+             do_table_structure=do_table_structure,
+             do_ocr=do_ocr
+        )
+        
 

@@ -49,8 +49,23 @@ class ArxivSettings(BaseConfigSettings):
         os.makedirs(v, exist_ok=True)
         return v
 
+class PDFParserSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="PDF_PARSER__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    max_pages: int = 30
+    max_file_size_mb: int = 20
+    do_ocr: bool = False
+    do_table_structure: bool = True
+
 class Settings(BaseConfigSettings):
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
+    pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
     
 def get_settings() -> Settings:
     return Settings()

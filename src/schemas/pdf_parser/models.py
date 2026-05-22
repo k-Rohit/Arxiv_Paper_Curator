@@ -32,7 +32,7 @@ class PdfContent(BaseModel):
      tables: List[PaperTable] = Field(default_factory=list, description="Tables")
      raw_text: str = Field(...,description="Full extracted text")
      references: List[str] = Field(default_factory=list, description="References")
-     parser_type: ParserType = Field(...,description="Parser used for extraction")
+     parser_used: ParserType = Field(...,description="Parser used for extraction")
      metadata: Dict[str, Any] = Field(default_factory=dict, description="Parser metadata")
      
 class ArxivMetadata(BaseModel):

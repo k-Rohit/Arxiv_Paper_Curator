@@ -21,7 +21,7 @@ class ArxivClient:
      
      def __init__(self, settings:ArxivSettings):
           self._settings = settings
-          self.__last_request_time: Optional[float] = None
+          self._last_request_time: Optional[float] = None
      
      @cached_property
      def pdf_cache_dir(self) -> Path:
@@ -30,27 +30,27 @@ class ArxivClient:
           return cache_dir
      
      @property
-     def get_base_url(self) -> str:
+     def base_url(self) -> str:
           return self._settings.base_url
      
      @property
-     def get_namespaces(self) -> str:
+     def namespaces(self) -> str:
           return self._settings.namespaces
 
      @property
-     def get_rate_limit_delay(self) -> float:
+     def rate_limit_delay(self) -> float:
           return self._settings.rate_limit_delay
 
      @property
-     def get_timeout_seconds(self) -> int:
+     def timeout_seconds(self) -> int:
           return self._settings.timeout_seconds
 
      @property
-     def get_max_results(self) -> int:
+     def max_results(self) -> int:
           return self._settings.max_results
 
      @property
-     def get_search_category(self) -> str:
+     def search_category(self) -> str:
           return self._settings.search_category
      
      async def fetch_papers(
@@ -77,10 +77,10 @@ class ArxivClient:
 
           """
           if max_results is None:
-               max_results = self.get_max_results
+               max_results = self.max_results
           
           # Build search query
-          search_query = f"cat:{self.get_search_category}"
+          search_query = f"cat:{self.search_category}"
           
           # Add date filtering if provided
           if from_date or to_date:
@@ -99,20 +99,20 @@ class ArxivClient:
           }
 
           safe = ":+[]"  # Don't encode :, +, [, ] characters needed for arXiv queries
-          url = f"{self.get_base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
+          url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
           
           try:
-               logger.info(f"Fetching {max_results} {self.get_search_category} papers from arxiv")
+               logger.info(f"Fetching {max_results} {self.search_category} papers from arxiv")
                
-               if self.__last_request_time is not None:
-                    time_since_last_req = time.time() - self.__last_request_time
-                    if time_since_last_req < self.get_rate_limit_delay:
-                         sleep_time = self.get_rate_limit_delay - time_since_last_req
+               if self._last_request_time is not None:
+                    time_since_last_req = time.time() - self._last_request_time
+                    if time_since_last_req < self.rate_limit_delay:
+                         sleep_time = self.rate_limit_delay - time_since_last_req
                          await asyncio.sleep(sleep_time)
                
-               self.__last_request_time = time.time()
+               self._last_request_time = time.time()
                
-               async with httpx.AsyncClient(timeout=self.get_timeout_seconds) as client:
+               async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                     response = await client.get(url)
                     response.raise_for_status()
                     xml_data = response.text
@@ -163,7 +163,7 @@ class ArxivClient:
             "ti:transformer AND cat:cs.AI"
         """
         if max_results is None:
-            max_results = self.get_max_results
+            max_results = self.max_results
 
         params = {
             "search_query": search_query,
@@ -180,7 +180,7 @@ class ArxivClient:
             # Add rate limiting delay between all requests (arXiv recommends 3 seconds)
             if self._last_request_time is not None:
                 time_since_last = time.time() - self._last_request_time
-                if time_since_last < self.get_rate_limit_delay:
+                if time_since_last < self.rate_limit_delay:
                     sleep_time = self.rate_limit_delay - time_since_last
                     await asyncio.sleep(sleep_time)
 
@@ -224,7 +224,7 @@ class ArxivClient:
              "max_results" : 1
         }
         safe = ":+[]*" # Don't ecode these characters, these are needed for query
-        url = f"{self.get_base_url}?{urlencode(params,safe=safe,quote_via=quote)}"
+        url = f"{self.base_url}?{urlencode(params,safe=safe,quote_via=quote)}"
         
         try:
              async with httpx.AsyncClient() as client:
@@ -252,7 +252,7 @@ class ArxivClient:
           
           try:
                root = ET.fromstring(xml_data)
-               entries = root.findall("atom:entry",self.get_namespaces)
+               entries = root.findall("atom:entry",self.namespaces)
                
                papers = []
                for entry in entries:
@@ -313,7 +313,7 @@ class ArxivClient:
         Returns:
             Extracted text or empty string
         """
-        elem = element.find(path, self.get_namespaces)
+        elem = element.find(path, self.namespaces)
         if elem is None or elem.text is None:
             return ""
 
@@ -330,7 +330,7 @@ class ArxivClient:
         Returns:
             arXiv ID or None
         """
-        id_elem = entry.find("atom:id", self.get_namespaces)
+        id_elem = entry.find("atom:id", self.namespaces)
         if id_elem is None or id_elem.text is None:
             return None
         return id_elem.text.split("/")[-1]
@@ -364,7 +364,7 @@ class ArxivClient:
                List of category terms
           """
           categories = []
-          for category in entry.findall("atom:category",self.get_namespaces):
+          for category in entry.findall("atom:category",self.namespaces):
                term = category.get("term")
                if term:
                     categories.append(term)
@@ -380,7 +380,7 @@ class ArxivClient:
         Returns:
             PDF URL or empty string (always HTTPS)
         """
-        for link in entry.findall("atom:link",self.get_namespaces):
+        for link in entry.findall("atom:link",self.namespaces):
              if link.get("type") == "application/pdf":
                   url = link.get("href","")
                   if url.startswith("http://arxiv.org/"):
@@ -435,10 +435,10 @@ class ArxivClient:
                max_retries = self._settings.download_max_retries
           logger.info(f"Downloading PDF from {url}")
           # Respect rate limits
-          await asyncio.sleep(self.get_rate_limit_delay)
+          await asyncio.sleep(self.rate_limit_delay)
           for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=float(self.get_timeout_seconds)) as client:
+                async with httpx.AsyncClient(timeout=float(self.timeout_seconds)) as client:
                     async with client.stream("GET", url) as response:
                         response.raise_for_status()
                         with open(path, "wb") as f:

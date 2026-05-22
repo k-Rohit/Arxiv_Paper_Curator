@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any
 
 class ParserType(str, Enum):
      """ PDF parser types options """
-     DOCKLING = "docling"
+     DOCLING = "docling"
 
 class PaperSection(BaseModel):
      """Represents a section of a paper."""

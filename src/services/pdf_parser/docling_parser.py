@@ -151,7 +151,7 @@ class DoclingParser:
                 tables=[],  # Removed: basic metadata not useful
                 raw_text=doc.export_to_text(),
                 references=[],
-                parser_used=ParserType.DOCLING,
+                parser_type=ParserType.DOCLING,
                 metadata={"source": "docling", "note": "Content extracted from PDF, metadata comes from arXiv API"},
             )
 

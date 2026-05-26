@@ -139,3 +139,47 @@ class MetadataFetcher:
             logger.error(f"Pipeline error: {e}")
             results["errors"].append(f"Pipeline error: {str(e)}")
             raise PipelineException(f"Pipeline execution failed: {e}") from e
+     
+    async def _process_pdfs_batch(self,papers: List[ArxivPaper]) -> Dict[str, Any]:
+          """ 
+          Process PDFs for a batch of papers with async concurrency.
+
+          Uses overlapping download+parse pipeline:
+          - Downloads happen concurrently (up to max_concurrent_downloads)
+          - As each download completes, parsing starts immediately
+          - Multiple PDFs can be parsing while others are still downloading
+
+          This is optimal for production workloads like 100 papers/day.
+
+          Args:
+               papers: List of ArxivPaper objects
+
+          Returns:
+               Dictionary with processing results and statistics
+          """
+          results = {
+               "downloaded" : 0,
+               "parseed" : 0,
+               "parsed_papers" : {},
+               "errors" : [],
+               "download_failures" : [],
+               "parse_failures" : []
+          }
+          
+          logger.info(f"starting async pipeline for {len(papers)} PDFs...")
+          logger.info(f"Concurrent downloads: {self.max_concurrent_downloads}")
+          logger.info(f"Concurrent parsing: {self.max_concurrent_parsing}")
+          
+          # Create semaphores for controlled concurrency
+          download_semaphore = asyncio.Semaphore(self.max_concurrent_downloads)
+          parse_semaphore = asyncio.Semaphore(self.max_concurrent_parsing)
+          
+          # Start downloading and parsing concurrently
+          pipeline_tasks = [self._download_and_parse_pipeline(paper, download_semaphore, parse_semaphore) for paper in papers]
+          pipeline_results = await asyncio.gather(*pipeline_tasks, return_exceptions=True)
+          
+          # Process results with detailed error tracking
+          for paper, result in zip(papers, pipeline_results):
+               pass
+          
+          

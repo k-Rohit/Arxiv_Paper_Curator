@@ -364,6 +364,12 @@ class MetadataFetcher:
         stored_count = 0
 
         for paper in papers:
+             
+             
+          # Base paper data
+            published_date = (
+           date_parser.parse(paper.published_date) if isinstance(paper.published_date, str) else paper.published_date
+          )         
             try:
                 # Store the metadata first
                 paper_data = {
@@ -372,7 +378,7 @@ class MetadataFetcher:
                     "authors": paper.authors,
                     "abstract": paper.abstract,
                     "categories": paper.categories,
-                    "published_date": paper.published_date,
+                    "published_date": published_date,
                     "pdf_url": paper.pdf_url,
                 }
 

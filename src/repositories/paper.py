@@ -110,7 +110,9 @@ class PaperRepository:
         if existing_paper:
             # UPDATE path: a row with this arxiv_id already exists.
             # Copy each field from the incoming schema onto the existing model.
-            # exclude_unset=True filters out fields the caller didn't pass. So if you build a PaperCreate # with just arxiv_id and title, only those two columns get updated. raw_text, sections, etc. # stay untouched on the existing row.
+            # exclude_unset=True filters out fields the caller didn't pass. 
+            # So if you build a PaperCreate # with just arxiv_id and title, only those two columns get updated. 
+            # raw_text, sections, etc. # stay untouched on the existing row.
             # Without that flag, un-passed fields would come through as None and silently wipe out existing data.
             for key, value in paper_create.model_dump(exclude_unset=True).items():
                 setattr(existing_paper, key, value)

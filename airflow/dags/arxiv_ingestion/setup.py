@@ -15,7 +15,7 @@ def setup_environment():
     logger.info("Setting up environment for arXiv paper ingestion")
 
     try:
-        arxiv_client, _pdf_parser, database, _metadata_fetcher, opensearch_client = get_cached_services()
+        arxiv_client, _pdf_parser, database, _metadata_fetcher = get_cached_services()
 
         with database.get_session() as session:
             session.execute(text("SELECT 1"))

@@ -55,9 +55,8 @@ report_task = PythonOperator(
 cleanup_task = BashOperator(
     task_id="cleanup_temp_files",
     bash_command="""
-    echo "Cleaning up temporary files..."
-    # Remove PDFs older than 30 days to manage disk space
-    find /tmp -name "*.pdf" -type f -mtime +30 -delete 2>/dev/null || true
+    echo "Cleaning up cached PDFs older than 30 days..."
+    find /opt/airflow/data/arxiv_pdfs -name "*.pdf" -type f -mtime +30 -delete 2>/dev/null || true
     echo "Cleanup completed"
     """,
     dag=dag,

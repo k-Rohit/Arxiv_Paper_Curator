@@ -94,7 +94,7 @@ class Settings(BaseConfigSettings):
     
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
-    openseearch : OpenSearchSettings = Field(default_factory=OpenSearchSettings)
+    opensearch : OpenSearchSettings = Field(default_factory=OpenSearchSettings)
     
     
 def get_settings() -> Settings:

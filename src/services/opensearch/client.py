@@ -69,3 +69,32 @@ class OpenSearchClient:
         results["hybrid_index"] = self._create_hybrid_index(force)
         results["rrf_pipeline"] = self._create_rrf_pipeline(force)
         return results
+    
+    def _create_hybrid_index(self, force: bool = False) -> bool:
+        """Create hybrid index for all search types (BM25, vector, hybrid).
+
+        :param force: If True, recreate index even if it exists
+        :returns: True if created, False if already exists
+        """
+        try:
+            if force and self.client.indices.exists(index=self.index_name):
+                self.client.indices.delete(index=self.index_name)
+                logger.info(f"Deleted existing hybrid index: {self.index_name}")
+
+            if not self.client.indices.exists(index=self.index_name):
+                self.client.indices.create(index=self.index_name, body=ARXIV_PAPERS_CHUNKS_MAPPING)
+                logger.info(f"Created hybrid index: {self.index_name}")
+                return True
+
+            logger.info(f"Hybrid index already exists: {self.index_name}")
+            return False
+
+        except Exception as e:
+            # Handle race condition when multiple workers start simultaneously:
+            # all check exists() -> False, all try to create, only one succeeds.
+            if "resource_already_exists_exception" in str(e):
+                logger.info(f"Hybrid index already exists (created by another worker): {self.index_name}")
+                return False
+            logger.error(f"Error creating hybrid index: {e}")
+            raise
+                         

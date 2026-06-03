@@ -20,7 +20,7 @@ def make_opensearch_client(settings: Optional[Settings] = None) -> OpenSearchCli
     if settings is None:
         settings = get_settings()
 
-        return OpenSearchClient(host=settings.opensearch.host, settings=settings)
+    return OpenSearchClient(host=settings.opensearch.host, settings=settings)
 
 
 def make_opensearch_client_fresh(settings: Optional[Settings] = None, host: Optional[str] = None) -> OpenSearchClient:
@@ -36,7 +36,6 @@ def make_opensearch_client_fresh(settings: Optional[Settings] = None, host: Opti
     if settings is None:
         settings = get_settings()
 
-        # Use provided host or settings host
-        opensearch_host = host or settings.opensearch.host
+    opensearch_host = host or settings.opensearch.host
 
-        return OpenSearchClient(host=opensearch_host, settings=settings)
+    return OpenSearchClient(host=opensearch_host, settings=settings)

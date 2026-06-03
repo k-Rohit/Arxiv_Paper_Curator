@@ -10,13 +10,33 @@ ripples into others.
 
 ---
 
+## 0. Per-folder deep dives
+
+For a focused explanation of one area, jump straight to its README. Each
+covers: what the folder does, file-by-file roles, internal connections,
+and dependencies in/out.
+
+| Folder | What it owns | Doc |
+|---|---|---|
+| `src/db/` | Database connection lifecycle, SQLAlchemy `Base` | [db/README](src/db/README.md) |
+| `src/models/` | ORM table definitions | [models/README](src/models/README.md) |
+| `src/repositories/` | Data access (the only place that queries Postgres) | [repositories/README](src/repositories/README.md) |
+| `src/schemas/` | Pydantic data shapes for validation and boundaries | [schemas/README](src/schemas/README.md) |
+| `src/services/` | Business logic + external integrations (top-level + 3 sub-services) | [services/README](src/services/README.md) |
+| `src/services/arxiv/` | arxiv API client + PDF download with rate limiting | [services/arxiv/README](src/services/arxiv/README.md) |
+| `src/services/pdf_parser/` | Docling-backed PDF parsing | [services/pdf_parser/README](src/services/pdf_parser/README.md) |
+| `src/services/opensearch/` | Search index client, BM25 + hybrid search, query builder deep dive | [services/opensearch/README](src/services/opensearch/README.md) |
+
+---
+
 ## 1. Layered architecture (who depends on whom)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ ENTRYPOINTS                                                   │
 │   src/main.py (FastAPI app)                                   │
-│   airflow/dags/arxiv_ingestion/* (DAG stubs — currently EMPTY)│
+│   airflow/dags/arxiv_paper_ingestion_and_indexing.py          │
+│   airflow/dags/arxiv_ingestion/{common,fetching,…}.py         │
 └─────────────────────────────────────────────────────────────┘
                               │
 ┌─────────────────────────────────────────────────────────────┐
@@ -25,17 +45,20 @@ ripples into others.
 │     MetadataFetcher + make_metadata_fetcher()                 │
 └─────────────────────────────────────────────────────────────┘
         │                  │                    │
-┌───────────────┐ ┌────────────────┐ ┌────────────────────────┐
-│ SERVICES      │ │ REPOSITORIES   │ │ DB                      │
-│ arxiv/client  │ │ repositories/  │ │ db/factory             │
-│ pdf_parser/   │ │   paper.py     │ │ db/interfaces/         │
-│   parser      │ │ (PaperRepo)    │ │   base, postgresql     │
-│   docling     │ │                │ │                        │
-└───────────────┘ └────────────────┘ └────────────────────────┘
+┌─────────────────────┐ ┌────────────────┐ ┌─────────────────┐
+│ SERVICES            │ │ REPOSITORIES   │ │ DB              │
+│ arxiv/client        │ │ repositories/  │ │ db/factory      │
+│ pdf_parser/         │ │   paper.py     │ │ db/interfaces/  │
+│   parser, docling   │ │ (PaperRepo)    │ │   base,         │
+│ opensearch/         │ │                │ │   postgresql    │
+│   client,           │ │                │ │                 │
+│   query_builder,    │ │                │ │                 │
+│   index_config      │ │                │ │                 │
+└─────────────────────┘ └────────────────┘ └─────────────────┘
         │                  │                    │
 ┌─────────────────────────────────────────────────────────────┐
 │ FOUNDATION (imported widely, import nothing internal)         │
-│   src/config.py        — settings (Arxiv, PDFParser, DB)      │
+│   src/config.py        — settings (Arxiv, PDFParser, DB, OS)  │
 │   src/exceptions.py    — all custom exception types           │
 │   src/models/paper.py  — SQLAlchemy ORM table `Paper`         │
 │   src/schemas/arxiv/paper.py       — ArxivPaper, PaperCreate  │
@@ -185,12 +208,32 @@ Foundation files first (most depended-on), orchestrator last.
 ### `src/services/pdf_parser/factory.py`
 - **Defines:** `make_pdf_parser_service() -> PDFParserService`
 - **Imports:** `config`, `.parser`
-- **Imported by:** (entrypoints)
+- **Imported by:** `airflow/dags/arxiv_ingestion/common.py`
+
+### `src/services/opensearch/index_config_hybrid.py`  — index schema + RRF pipeline
+- **Defines:** `ARXIV_PAPERS_CHUNKS_INDEX`, `ARXIV_PAPERS_CHUNKS_MAPPING`, `HYBRID_RRF_PIPELINE`
+- **Imports (internal):** none — pure data dicts
+- **Imported by:** `services/opensearch/client`
+
+### `src/services/opensearch/query_builder.py`  — BM25 query DSL builder
+- **Defines:** `QueryBuilder` (`.build()` produces the OpenSearch search body dict)
+- **Imports (internal):** none — pure dict-building logic
+- **Imported by:** `services/opensearch/client`
+
+### `src/services/opensearch/client.py`  — OpenSearch wrapper
+- **Defines:** `OpenSearchClient` (setup, index, search, delete; BM25/vector/hybrid)
+- **Imports:** `config.Settings`, `.index_config_hybrid` (`ARXIV_PAPERS_CHUNKS_MAPPING`, `HYBRID_RRF_PIPELINE`), `.query_builder` (`QueryBuilder`)
+- **Imported by:** `services/opensearch/factory`
+
+### `src/services/opensearch/factory.py`
+- **Defines:** `make_opensearch_client()` (cached singleton) and `make_opensearch_client_fresh()`
+- **Imports:** `config`, `.client`
+- **Imported by:** `airflow/dags/arxiv_ingestion/common.py` (once wired in)
 
 ### `src/services/metadata_fetcher.py`  — ★ ORCHESTRATOR
 - **Defines:** `MetadataFetcher`, `make_metadata_fetcher(...)`
 - **Imports:** `config`, `exceptions`, `repositories/paper` (`PaperRepository`), `schemas/arxiv/paper`, `schemas/pdf_parser/models`, `services/arxiv/client` (`ArxivClient`), `services/pdf_parser/parser` (`PDFParserService`)
-- **Imported by:** (entrypoints / DAGs once implemented)
+- **Imported by:** `airflow/dags/arxiv_ingestion/common.py` (via `make_metadata_fetcher`)
 
 ### `src/main.py`  — FastAPI entrypoint
 - **Defines:** `app`, `health()`
@@ -229,13 +272,26 @@ without knowing its dependencies — the standard construction seam for this rep
    `make_database()`, or the `papers` table won't exist. (This is the exact
    issue seen in the arxiv-integration notebook.)
 
-2. **`services/arxiv/` and `services/pdf_parser/` have no `__init__.py`** but
-   use relative imports (`from .client import ...`). They work as namespace
-   packages — keep that in mind if you reorganize.
+2. **All package directories now have `__init__.py`.** Earlier versions
+   relied on namespace-package behavior for `services/`, `services/arxiv/`,
+   `services/pdf_parser/`, and `schemas/arxiv/`. They've all been given
+   empty `__init__.py` files, so the project now packages cleanly for
+   installation tools and avoids subtle pytest collection issues.
 
-3. **Airflow DAG files are empty stubs.**
-   `airflow/dags/arxiv_ingestion/{common,fetching,indexing,reporting,setup}.py`
-   are 0 bytes — the pipeline isn't wired into Airflow yet.
+3. **Airflow DAG files: mostly populated, one still empty.**
+   `common.py`, `fetching.py`, `setup.py`, `reporting.py` all have content
+   and wire into the DAG `arxiv_paper_ingestion_and_indexing.py`.
+   `indexing.py` is still a 0-byte stub — the OpenSearch indexing task
+   isn't wired into the DAG yet, even though `services/opensearch/` is
+   built.
+
+4. **OpenSearch isn't in the runtime pipeline yet.** `services/opensearch/`
+   exists end-to-end (client, factory, query builder, index config), but
+   `metadata_fetcher.py` doesn't call it, and the Airflow DAG doesn't
+   include an indexing task. Wiring it in is the next integration step:
+   uncomment the `opensearch_client` line in
+   `airflow/dags/arxiv_ingestion/common.py`, fill in `indexing.py`, and
+   add `index_task` to the DAG between `fetch` and `report`.
 
 ---
 *Regenerate this map after adding modules or changing import wiring.*

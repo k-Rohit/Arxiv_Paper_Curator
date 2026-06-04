@@ -102,6 +102,193 @@ The schema is `ARXIV_PAPERS_CHUNKS_MAPPING` in
   OpenSearch object (not part of the index). At search time, you pass
   `?search_pipeline=hybrid-rrf-pipeline` to fuse BM25 + vector rankings.
 
+  Great, let me unpack each point with a concrete example. We'll use one fake arxiv paper throughout.
+
+## Our example paper
+
+```
+Paper: "Attention Is All You Need"
+arxiv_id: 1706.03762
+Full text: ~10,000 words across many sections
+```
+
+---
+
+## Point 1: "One document per chunk, not per paper"
+
+A "document" in OpenSearch = one row, one searchable item.
+
+**Naive way (one doc per paper):**
+
+```
+┌────────────────────────────────────────────────────┐
+│ Document 1                                          │
+│   arxiv_id: 1706.03762                              │
+│   title: "Attention Is All You Need"                │
+│   full_text: <entire 10,000-word paper>             │  ← one huge blob
+└────────────────────────────────────────────────────┘
+```
+
+Problem: too big. Search returns "this paper matches" but not *where*. Embeddings on 10,000 words are mush — they average everything together.
+
+**This project's way (one doc per chunk):**
+
+First, upstream code splits the paper into ~500-word chunks:
+
+```
+Paper text
+   │  text splitter (happens BEFORE OpenSearch)
+   ▼
+chunk 0: "We propose a new architecture called the Transformer..."
+chunk 1: "The encoder is composed of a stack of 6 identical layers..."
+chunk 2: "Self-attention, sometimes called intra-attention, is..."
+chunk 3: "Multi-head attention allows the model to jointly attend..."
+... (20 chunks total)
+```
+
+Then **each chunk becomes its own document** in OpenSearch:
+
+```
+┌─────────────────────────────────┐
+│ Doc 1                            │
+│   chunk_id: "1706.03762_0"       │
+│   arxiv_id: "1706.03762"  ← same │
+│   title: "Attention Is All..."   │
+│   chunk_index: 0                 │
+│   chunk_text: "We propose..."    │
+│   embedding: [0.02, -0.11, ...]  │
+└─────────────────────────────────┘
+┌─────────────────────────────────┐
+│ Doc 2                            │
+│   chunk_id: "1706.03762_1"       │
+│   arxiv_id: "1706.03762"  ← same │
+│   title: "Attention Is All..."   │
+│   chunk_index: 1                 │
+│   chunk_text: "The encoder..."   │
+│   embedding: [0.41, 0.07, ...]   │
+└─────────────────────────────────┘
+... 18 more docs for this same paper
+```
+
+**One paper → 20 documents.** They share `arxiv_id` and `title`, but each has its own `chunk_text` and `embedding`.
+
+**Why?** When you search "what is multi-head attention", you don't want the whole paper — you want the *exact paragraph* explaining it. Chunk-level lets you return chunk 3 specifically.
+
+---
+
+## Point 2: "Each chunk has BOTH text fields AND an embedding"
+
+Same document holds two representations of the same content:
+
+```
+Doc for chunk 2:
+┌──────────────────────────────────────────────────┐
+│  TEXT side (for BM25 keyword search)              │
+│  ─────────────────────────────                   │
+│  chunk_text: "Self-attention, sometimes called   │
+│               intra-attention, is..."             │
+│  title: "Attention Is All You Need"               │
+│  abstract: "The dominant sequence transduction..."│
+│                                                   │
+│  VECTOR side (for semantic search)                │
+│  ─────────────────────────────                   │
+│  embedding: [0.12, -0.34, 0.55, ... ] (1024 nums)│
+└──────────────────────────────────────────────────┘
+```
+
+It's the **same chunk, two ways of finding it**:
+- Type the word "self-attention" → keyword search finds it via the text.
+- Type "how do transformers focus on parts of the input" → vector search finds it via the embedding (no shared words, but same meaning).
+
+That's why every doc carries both.
+
+---
+
+## Point 3: "`index.knn: True` + HNSW enables fast nearest-neighbor search"
+
+You have say 100,000 chunk documents = 100,000 embedding vectors stored.
+
+You search with one query vector. Question: *which 5 stored vectors are closest to mine?*
+
+**Naive way:** compare your query vector to all 100,000, one by one. Slow.
+
+**HNSW way:** at index time, OpenSearch builds a graph that links each vector to its neighbors. At search time it hops through the graph to find close matches in ~milliseconds.
+
+```
+Without HNSW              With HNSW (a graph)
+─────────────             ──────────────────
+your vector               your vector
+     │                         │
+compare to ALL                jump in at any node
+100,000 vectors                   ↓
+     │                       hop to closer neighbor
+     ▼                            ↓
+ slow                         hop to closer still
+                                  ↓
+                              found top 5 — fast
+```
+
+`"index.knn": True` flips the switch that says "build that graph for the embedding field." Without it, vector search would either fail or fall back to slow brute force.
+
+> "Approximate" means it might miss 1 of the top 100, but it's ~1000× faster. Worth it.
+
+---
+
+## Point 4: "The RRF pipeline is a separate OpenSearch object"
+
+The index is a **collection of documents** (your chunks). The RRF pipeline is a **stored recipe for combining result lists**. They live separately on the server.
+
+```
+OpenSearch server
+├── Index: arxiv-papers-chunks
+│      └── 100,000 chunk documents
+│
+└── Search pipeline: hybrid-rrf-pipeline      ← separate thing
+       └── recipe: "merge two lists using
+                    RRF formula with k=60"
+```
+
+At search time you say "use this index AND apply this recipe":
+
+```python
+self.client.search(
+    index="arxiv-papers-chunks",              # which docs to search
+    body=search_body,                          # the hybrid query
+    params={"search_pipeline": "hybrid-rrf-pipeline"}   # how to combine results
+)
+```
+
+Why separate? Same recipe could combine results from **any** index. And you can change the recipe (k=60 → k=30) without rebuilding the index, or run the same index with a different fusion strategy. Decoupling = flexibility.
+
+---
+
+## All 4 points in one picture
+
+```
+Paper "1706.03762"
+       │
+       │  (1) chunk it upstream
+       ▼
+  20 chunks
+       │
+       │  (2) each chunk → store text + embedding together as one doc
+       ▼
+┌─────────────────────────────────────────┐
+│ Index: arxiv-papers-chunks               │
+│   • 20 docs for this paper               │
+│   • each: text fields + embedding vec    │
+│   • (3) HNSW graph built on embeddings   │
+└─────────────────────────────────────────┘
+
+       (4) Sitting separately on the same server:
+┌─────────────────────────────────────────┐
+│ Search pipeline: hybrid-rrf-pipeline     │
+│   "fuse two ranked lists using RRF k=60" │
+└─────────────────────────────────────────┘
+
+At query time → use the index + reference the pipeline by name.
+```
+
 For a full breakdown of the index config and what hybrid search means,
 see the [index_config_hybrid.py walkthrough in PROJECT_MAP.md](../../../PROJECT_MAP.md).
 

@@ -85,6 +85,21 @@ class OpenSearchSettings(BaseConfigSettings):
     rrf_pipeline_name: str = "hybrid-rrf-pipeline"
     hybrid_search_size_multiplier: int = 2  # Get k*multiplier for better recall
 
+class OpenAIEmbeddingsSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env",str(ENV_FILE_PATH)],
+        env_prefix="OPENAI_EMBEDDINGS__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False
+    )
+    
+    model: str = "text-embedding-3-small"
+    dimensions: int = 1024
+    batch_size: int = 100
+    max_retries: int = 3
+    timeout_seconds: float = 30.0
+
 class Settings(BaseConfigSettings):
     
     postgres_database_url: str = "postgresql+psycopg2://rag_user:rag_password@localhost:5432/rag_db"

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import List, Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -87,13 +87,18 @@ class OpenSearchSettings(BaseConfigSettings):
 
 class OpenAIEmbeddingsSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
-        env_file=[".env",str(ENV_FILE_PATH)],
+        env_file=[".env", str(ENV_FILE_PATH)],
         env_prefix="OPENAI_EMBEDDINGS__",
         extra="ignore",
         frozen=True,
-        case_sensitive=False
+        case_sensitive=False,
     )
-    
+
+    # Read OPENAI_API_KEY directly (no prefix) — that's the standard env var name.
+    api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY", "OPENAI_EMBEDDINGS__API_KEY"),
+    )
     model: str = "text-embedding-3-small"
     dimensions: int = 1024
     batch_size: int = 100
@@ -109,7 +114,8 @@ class Settings(BaseConfigSettings):
     
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
-    opensearch : OpenSearchSettings = Field(default_factory=OpenSearchSettings)
+    opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
+    openai_embeddings: OpenAIEmbeddingsSettings = Field(default_factory=OpenAIEmbeddingsSettings)
     
     
 def get_settings() -> Settings:

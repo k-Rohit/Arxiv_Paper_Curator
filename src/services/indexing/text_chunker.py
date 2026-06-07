@@ -62,8 +62,35 @@ class TextChunker:
         paper_id: str,
         sections: Optional[Union[Dict[str, str], str, list]] = None,
     ) -> List[TextChunk]:
-        """Chunk a paper using hybrid section-based approach."""
-        pass
+        """Chunk a paper using hybrid section-based approach.
+
+        Strategy:
+        - For sections 100-800 words: Use as single chunk with title+abstract
+        - For sections <100 words: Combine with adjacent sections
+        - For sections >800 words: Split using traditional word-based chunking
+        - Fallback to traditional chunking if no sections available
+
+        :param title: Paper title
+        :param abstract: Paper abstract
+        :param full_text: Full text content
+        :param arxiv_id: ArXiv ID of the paper
+        :param paper_id: Database ID of the paper
+        :param sections: Dictionary or JSON string of sections
+        :returns: List of text chunks with metadata
+        """
+        # Try section-based chunking first
+        if sections:
+            try:
+                section_chunks = self._chunk_by_sections(title, abstract, arxiv_id, paper_id, sections)
+                if section_chunks:
+                    logger.info(f"Created {len(section_chunks)} section-based chunks for {arxiv_id}")
+                    return section_chunks
+            except Exception as e:
+                logger.warning(f"Section-based chunking failed for {arxiv_id}: {e}")
+
+        # Fallback to traditional word-based chunking
+        logger.info(f"Using traditional word-based chunking for {arxiv_id}")
+        return self.chunk_text(full_text, arxiv_id, paper_id)
 
     def chunk_text(self, text: str, arxiv_id: str, paper_id: str) -> List[TextChunk]:
         """Chunk text into overlapping segments.

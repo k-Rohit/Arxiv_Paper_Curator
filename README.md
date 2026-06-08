@@ -21,9 +21,17 @@ arxiv API  ─▶  fetch metadata (daily)
         Search API  ──▶  BM25  ┐
                     ──▶  Vector ├─▶  RRF fusion  ─▶  ranked chunks
                     ──▶  Hybrid ┘
+                       │
+                       ▼
+   "what is multi-head attention?"
+                       ▼
+       Chat / Agent layer  ─▶  prompt = question + retrieved chunks
+                           ─▶  LLM (Claude / GPT / Ollama via LangGraph)
+                           ─▶  answer with citations to arxiv_ids
+                           ─▶  served via Gradio UI + Telegram bot
 ```
 
-One Airflow DAG orchestrates the write path. A FastAPI service (forthcoming) will expose the search endpoints.
+One Airflow DAG orchestrates the write path. A FastAPI service (forthcoming) exposes the search endpoints. A Gradio chat UI + Telegram bot (planned) sit on top, calling an LLM with retrieved chunks as context — that's the final "chat with the papers" experience.
 
 ---
 
@@ -43,8 +51,11 @@ One Airflow DAG orchestrates the write path. A FastAPI service (forthcoming) wil
 | Hybrid indexing service (chunker + embeddings + OpenSearch) | 🚧 in progress |
 | Airflow indexing task (wire indexing into the DAG) | 🚧 in progress |
 | FastAPI `/search` endpoint | ⏳ planned |
+| **Chat / Q&A layer** (LangGraph agent + LLM with retrieved context) | ⏳ planned (course week 5) |
+| **Gradio chat UI** for "talk to the papers" | ⏳ planned (course week 5) |
+| **Telegram bot** interface | ⏳ planned (course week 6) |
 | Agentic layer (multi-step retrieval, reranking) | ⏳ planned |
-| Eval harness | ⏳ planned |
+| Eval harness (RAG quality + LLM-as-judge) | ⏳ planned (course week 6) |
 
 End-to-end pipeline verified via [`notebooks/end-to-end-pipeline.ipynb`](notebooks/end-to-end-pipeline.ipynb) — runs every stage against a real paper in ~1 minute.
 

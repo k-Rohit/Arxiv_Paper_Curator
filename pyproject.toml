@@ -58,7 +58,20 @@ line-length = 130
 exclude = ["notebooks/**", ".venv/**"]
 src = ["src", "tests"]
 lint.select = [
-  "I",
+  "I",     # isort — import ordering
+  "F",     # Pyflakes — undefined names, unused imports/variables, unreachable code
+  "E",     # pycodestyle errors — indentation, syntax-adjacent issues
+  "W",     # pycodestyle warnings — whitespace, blank lines
+  "B",     # flake8-bugbear — real bug patterns (mutable default args, unused loop vars, etc.)
+  "RET",   # flake8-return — missing returns, unnecessary returns, returns inside loops
+  "SIM",   # flake8-simplify — code that could be cleaner
+  "UP",    # pyupgrade — modern Python syntax
+]
+
+# Skip specific noisy or stylistic rules
+lint.ignore = [
+  "E501",  # line-too-long (handled by `line-length` + formatter)
+  "B008",  # function-call-in-default-argument (false-positives for Pydantic Field defaults)
 ]
 
 [tool.pytest.ini_options]

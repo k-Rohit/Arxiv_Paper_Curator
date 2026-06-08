@@ -67,10 +67,19 @@ same order as input.
 
 ### Why async?
 
-Every method is `async def` so it composes with the rest of the pipeline
-(`metadata_fetcher.fetch_and_process_papers`, the upcoming indexing task)
-which uses `asyncio.gather` for concurrent I/O. Embedding 1000 chunks
-across 10 papers can happen in parallel rather than sequentially.
+Every method is `async def` so it **composes with the asyncio event loop**
+that the rest of the pipeline runs on (`metadata_fetcher.fetch_and_process_papers`
+uses one). If the embeddings call were synchronous, `await`-ing it would
+block the loop — no other downloads, parses, or DB writes could happen
+in parallel during the embed.
+
+**Note:** within a single `embed_batch` call, the per-batch API calls are
+**sequential** (a `for` loop with `await`). OpenAI rate-limits per API
+key, so parallelizing within one client just hits the limit faster.
+Where `asyncio.gather` *would* eventually appear: if you build a
+paper-level indexing task that processes N papers concurrently
+(`asyncio.gather(*[indexer.index_paper(p) for p in papers])`). Each call
+runs in parallel; embeddings within each remain sequential.
 
 ### The factory
 

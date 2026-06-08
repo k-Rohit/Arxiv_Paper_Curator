@@ -2,9 +2,7 @@
 
 import logging
 from typing import List
-
 from openai import AsyncOpenAI
-
 from src.config import OpenAIEmbeddingsSettings
 
 logger = logging.getLogger(__name__)

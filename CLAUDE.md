@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## How to explain things to the user (important)
+
+The user is learning. When explaining ANY concept, follow these rules — strictly:
+
+- **Simple language.** Plain English, not jargon. If you must use a technical term, define it in one sentence.
+- **Always include a concrete example.** Code snippet, before/after comparison, real-world analogy, or a worked-through case. Never explain a concept abstractly without showing it.
+- **Crisp and short.** Aim for ~30-50 lines per explanation. Cut anything that isn't the core point.
+- **No exhaustive surveys.** If there are 5 options, pick ONE recommendation and explain it. Don't list all 5 unless asked.
+- **Use tables sparingly** — only when comparing 2-3 things side-by-side adds real value.
+- **No fluff phrases** like "as we discussed," "great question," or filler intros. Start with the answer.
+
+Bad: "Dependency injection is a design pattern where dependencies are provided to a class rather than created within it. There are several forms including constructor injection, setter injection, and interface injection. Each has its own tradeoffs..."
+
+Good: "DI = pass the thing in instead of building it inside. Example: `Search(opensearch=client)` instead of `Search()` then `self.opensearch = OpenSearchClient(host='...')` inside. Win: you can swap `client` for a fake in tests."
+
 ## Start here
 
 Before doing anything substantial, read these two files — they're the canonical map of the codebase:

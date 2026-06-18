@@ -47,6 +47,7 @@ def health(settings: SettingsDep, database: DatabaseDep, opensearch_client: Open
     version="0.1.0",
     environment="dev",
     service_name="rag-api",
+    services=services
     )
 
 

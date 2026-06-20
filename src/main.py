@@ -16,6 +16,7 @@ from src.config import get_settings
 from src.db.factory import make_database
 from src.middlewares import RequestLoggingMiddleware
 from src.services.arxiv.factory import make_arxiv_client
+from src.services.cache.factory import make_cache_client
 from src.services.embeddings.factory import make_openai_embeddings_client
 from src.services.openai_.factory import make_openai_client
 from src.services.opensearch.factory import make_opensearch_client
@@ -53,7 +54,16 @@ async def lifespan(app: FastAPI):
     app.state.pdf_parser         = make_pdf_parser_service()
     app.state.embeddings_service = make_openai_embeddings_client()
     app.state.llm_client         = make_openai_client()
-    logger.info("All services initialized: arxiv, pdf_parser, embeddings, llm")
+
+    # Cache (optional — degrade gracefully if Redis is down)
+    try:
+        app.state.cache = make_cache_client(app.state.settings)
+        logger.info("Cache ready")
+    except Exception as e:
+        app.state.cache = None
+        logger.warning(f"Cache disabled — Redis unavailable: {e}")
+
+    logger.info("All services initialized: arxiv, pdf_parser, embeddings, llm, cache")
 
     logger.info("API ready")
     yield

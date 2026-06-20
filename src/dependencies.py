@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from src.config import Settings
 from src.db.interfaces.base import BaseDatabase
 from src.services.arxiv.client import ArxivClient
+from src.services.cache.client import CacheClient
 from src.services.embeddings.openai_client import OpenAIEmbeddingsClient
 from src.services.openai_.client import OpenAIClient
 from src.services.opensearch.client import OpenSearchClient
@@ -82,6 +83,11 @@ def get_llm_client(request: Request) -> OpenAIClient:
     return request.app.state.llm_client
 
 
+def get_cache(request: Request) -> CacheClient | None:
+    """Get the shared cache client (may be None if Redis is unavailable)."""
+    return request.app.state.cache
+
+
 # ─── Annotated type aliases (what routes actually use) ──────────────────
 
 SettingsDep    = Annotated[Settings, Depends(get_request_settings)]
@@ -92,3 +98,4 @@ ArxivDep       = Annotated[ArxivClient, Depends(get_arxiv_client)]
 PDFParserDep   = Annotated[PDFParserService, Depends(get_pdf_parser)]
 EmbeddingsDep  = Annotated[OpenAIEmbeddingsClient, Depends(get_embeddings_service)]
 LLMDep         = Annotated[OpenAIClient, Depends(get_llm_client)]
+CacheDep       = Annotated[CacheClient | None, Depends(get_cache)]

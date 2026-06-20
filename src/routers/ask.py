@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from src.dependencies import EmbeddingsDep, LLMDep, OpenSearchDep
+from src.dependencies import CacheDep, EmbeddingsDep, LLMDep, OpenSearchDep
 from src.schemas.api.ask import AskRequest, AskResponse
 
 logger = logging.getLogger(__name__)
@@ -18,14 +18,22 @@ async def ask(
     opensearch: OpenSearchDep,
     embedder: EmbeddingsDep,
     llm: LLMDep,
+    cache: CacheDep,
 ) -> AskResponse:
     """Answer a question grounded in retrieved arXiv paper chunks.
 
+    0. Check exact-match cache; return cached answer if present.
     1. Embed the user query (for hybrid search).
     2. Retrieve top-K relevant chunks from OpenSearch.
     3. Build a prompt with chunks as context, call the LLM.
-    4. Return the answer + sources.
+    4. Store the response in cache and return.
     """
+    # 0. Cache lookup (exact match on request params)
+    if cache is not None:
+        cached = await cache.find_cached_response(request)
+        if cached is not None:
+            return cached
+
     # 1. Embed the query if hybrid search is requested
     query_embedding = None
     search_mode = "bm25"
@@ -71,10 +79,16 @@ async def ask(
     # 5. Build the response — extract unique source URLs from hits
     sources = list({hit.get("pdf_url", "") for hit in hits if hit.get("pdf_url")})
 
-    return AskResponse(
+    response = AskResponse(
         query=request.query,
         answer=rag_result.get("answer", ""),
         sources=sources,
         chunks_used=len(hits),
         search_mode=search_mode,
     )
+
+    # 6. Store in cache for next time (fire-and-forget; cache failures don't break the response)
+    if cache is not None:
+        await cache.store_response(request, response)
+
+    return response

@@ -125,6 +125,26 @@ class OpenAIClientSettings(BaseConfigSettings):
     timeout_seconds: float = 30.0
     max_retries: int = 3
 
+class RedisSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="REDIS__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    host: str = "localhost"
+    port: int = 6379
+    password: str = ""
+    db: int = 0
+    decode_responses: bool = True
+    socket_timeout: int = 30
+    socket_connect_timeout: int = 30
+
+    # Cache settings
+    ttl_hours: int = 6  # Cache TTL in hours
+
 class Settings(BaseConfigSettings):
     
     postgres_database_url: str = "postgresql+psycopg2://rag_user:rag_password@localhost:5432/rag_db"
@@ -137,6 +157,7 @@ class Settings(BaseConfigSettings):
     opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
     openai_embeddings: OpenAIEmbeddingsSettings = Field(default_factory=OpenAIEmbeddingsSettings)
     openai_client: OpenAIClientSettings = Field(default_factory=OpenAIClientSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
     
     
 def get_settings() -> Settings:

@@ -22,6 +22,7 @@ from src.config import Settings
 from src.db.interfaces.base import BaseDatabase
 from src.services.arxiv.client import ArxivClient
 from src.services.embeddings.openai_client import OpenAIEmbeddingsClient
+from src.services.openai_.client import OpenAIClient
 from src.services.opensearch.client import OpenSearchClient
 from src.services.pdf_parser.parser import PDFParserService
 
@@ -76,6 +77,11 @@ def get_embeddings_service(request: Request) -> OpenAIEmbeddingsClient:
     return request.app.state.embeddings_service
 
 
+def get_llm_client(request: Request) -> OpenAIClient:
+    """Get the shared OpenAI LLM (chat-completion) client."""
+    return request.app.state.llm_client
+
+
 # ─── Annotated type aliases (what routes actually use) ──────────────────
 
 SettingsDep    = Annotated[Settings, Depends(get_request_settings)]
@@ -85,3 +91,4 @@ OpenSearchDep  = Annotated[OpenSearchClient, Depends(get_opensearch_client)]
 ArxivDep       = Annotated[ArxivClient, Depends(get_arxiv_client)]
 PDFParserDep   = Annotated[PDFParserService, Depends(get_pdf_parser)]
 EmbeddingsDep  = Annotated[OpenAIEmbeddingsClient, Depends(get_embeddings_service)]
+LLMDep         = Annotated[OpenAIClient, Depends(get_llm_client)]

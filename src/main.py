@@ -17,11 +17,10 @@ from src.db.factory import make_database
 from src.middlewares import RequestLoggingMiddleware
 from src.services.arxiv.factory import make_arxiv_client
 from src.services.embeddings.factory import make_openai_embeddings_client
+from src.services.openai_.factory import make_openai_client
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.pdf_parser.factory import make_pdf_parser_service
-from src.routers import ping
-from src.routers import hybrid_search
-# from src.routers.ask import ask_router
+from src.routers import ask, hybrid_search, ping
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,7 +52,8 @@ async def lifespan(app: FastAPI):
     app.state.arxiv_client       = make_arxiv_client()
     app.state.pdf_parser         = make_pdf_parser_service()
     app.state.embeddings_service = make_openai_embeddings_client()
-    logger.info("All services initialized: arxiv, pdf_parser, embeddings")
+    app.state.llm_client         = make_openai_client()
+    logger.info("All services initialized: arxiv, pdf_parser, embeddings, llm")
 
     logger.info("API ready")
     yield
@@ -73,10 +73,10 @@ app = FastAPI(
 # Middleware
 app.add_middleware(RequestLoggingMiddleware)
 
-# Routers — added incrementally
-app.include_router(ping.router,prefix="/api/v1")
-app.include_router(hybrid_search.router,  prefix="/api/v1")
-# app.include_router(ask_router,            prefix="/api/v1")
+# Routers
+app.include_router(ping.router,          prefix="/api/v1")
+app.include_router(hybrid_search.router, prefix="/api/v1")
+app.include_router(ask.router,           prefix="/api/v1")
 
 
 if __name__ == "__main__":

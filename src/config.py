@@ -104,6 +104,26 @@ class OpenAIEmbeddingsSettings(BaseConfigSettings):
     batch_size: int = 100
     max_retries: int = 3
     timeout_seconds: float = 30.0
+    
+class OpenAIClientSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="OPENAI_CLIENT__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY", "OPENAI_CLIENT__API_KEY"),
+    )
+    model: str = "gpt-4o-mini"
+    max_tokens: int = 1024
+    temperature: float = 0.2
+    top_p: float = 1.0
+    timeout_seconds: float = 30.0
+    max_retries: int = 3
 
 class Settings(BaseConfigSettings):
     
@@ -116,6 +136,7 @@ class Settings(BaseConfigSettings):
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
     opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
     openai_embeddings: OpenAIEmbeddingsSettings = Field(default_factory=OpenAIEmbeddingsSettings)
+    openai_client: OpenAIClientSettings = Field(default_factory=OpenAIClientSettings)
     
     
 def get_settings() -> Settings:

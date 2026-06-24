@@ -55,10 +55,10 @@ One Airflow DAG owns the write path. A FastAPI service (`/api/v1/ping`, `/api/v1
 | `/api/v1/hybrid_search` retrieval endpoint | ✅ |
 | `/api/v1/ask` RAG Q&A endpoint (retrieve → LLM → answer) | ✅ |
 | Redis exact-match cache for `/ask` (with graceful degrade) | ✅ |
-| **Langfuse tracing / observability** | ⏳ planned (course week 6) |
-| **Agentic RAG (LangGraph: grade → rewrite → guardrails)** | ⏳ planned (course week 7) |
-| **Gradio chat UI** for "talk to the papers" | ⏳ planned (course week 5/7) |
-| Telegram bot interface | ⏳ optional (course week 7) |
+| **Langfuse tracing / observability** | ⏳ planned |
+| **Agentic RAG (LangGraph: grade → rewrite → guardrails)** | ⏳ planned |
+| **Gradio chat UI** for "talk to the papers" | ⏳ planned |
+| Telegram bot interface | ⏳ planned |
 | Eval harness (RAG quality + LLM-as-judge) | ⏳ planned |
 
 End-to-end pipeline verified via [`notebooks/end-to-end-pipeline.ipynb`](notebooks/end-to-end-pipeline.ipynb) — runs every stage against a real paper in ~1 minute.

@@ -4,7 +4,7 @@ import time
 import xml.etree.ElementTree as ET
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 from urllib.parse import quote, urlencode
 
 import httpx

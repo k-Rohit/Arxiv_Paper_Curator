@@ -76,7 +76,7 @@ class SourceItem(BaseModel):
 class ToolArtefact(BaseModel):
     """Standard ENVELOPE for any tool call's result.
 
-    LangGraph agents call "tools" (retrieve_chunks, rerank, web_search…).
+    LangGraph agents call "tools".
     Every tool wraps its output in ToolArtefact so the graph stores
     consistent shapes regardless of which tool ran. `metadata` carries
     extras like latency, token counts, or the search mode used.

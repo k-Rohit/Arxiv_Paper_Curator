@@ -28,6 +28,7 @@ dependencies = [
     "langchain-ollama>=0.3.0",
     "openai>=1.40.0",
     "langsmith>=0.8.4",
+    "langchain-openai>=1.2.2",
 ]
 readme = "README.md"
 

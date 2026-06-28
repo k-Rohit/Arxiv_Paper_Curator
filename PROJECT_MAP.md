@@ -94,97 +94,101 @@ and dependencies in/out.
 
 ---
 
-## 2. Dependency graph (mermaid — renders in GitHub/VS Code)
+## 2. Dependency graphs (two diagrams — one per code path)
+
+Each diagram shows ONE path through the codebase. Foundation (`config.py`,
+`exceptions.py`, schemas) is imported almost everywhere — edges from those
+are intentionally omitted from both diagrams to keep them readable.
+
+### 2A. Read path — FastAPI handles a `/ask` request
 
 ```mermaid
 graph TD
-    main[main.py<br/>FastAPI + lifespan]
-    DEPS[dependencies.py<br/>get_* + *Dep aliases]
-    MW[middlewares.py<br/>RequestLoggingMiddleware]
+    subgraph entry[Entrypoint]
+        main[main.py<br/>lifespan + middleware]
+    end
 
-    RPING[routers/ping.py]
-    RHYB[routers/hybrid_search.py]
-    RASK[routers/ask.py]
+    subgraph routers[Routers]
+        RASK[routers/ask.py]
+        RHYB[routers/hybrid_search.py]
+        RPING[routers/ping.py]
+    end
 
-    MF[services/metadata_fetcher.py<br/>MetadataFetcher]
+    subgraph di[DI Layer]
+        DEPS[dependencies.py<br/>app.state ──> typed Dep aliases]
+    end
 
-    AC[services/arxiv/client.py<br/>ArxivClient]
-    PP[services/pdf_parser/parser.py<br/>PDFParserService]
-    DP[services/pdf_parser/docling_parser.py<br/>DoclingParser]
-    OSC[services/opensearch/client.py<br/>OpenSearchClient]
-    EMB[services/embeddings/openai_client.py<br/>OpenAIEmbeddingsClient]
-    IDX[services/indexing/hybrid_indexer.py<br/>HybridIndexingService]
-    CHK[services/indexing/text_chunker.py<br/>TextChunker]
-    OAI[services/openai_/client.py<br/>OpenAIClient + RAGPromptBuilder]
-    CCH[services/cache/client.py<br/>CacheClient]
+    subgraph services[Services - read path]
+        CCH[cache/client.py<br/>CacheClient]
+        EMB[embeddings/openai_client.py<br/>OpenAIEmbeddingsClient]
+        OSC[opensearch/client.py<br/>OpenSearchClient]
+        OAI[openai_/client.py<br/>OpenAIClient]
+    end
 
-    REPO[repositories/paper.py<br/>PaperRepository]
-    DBF[db/factory.py<br/>make_database]
-    PG[db/interfaces/postgresql.py<br/>PostgreSQLDatabase, Base]
-    DBASE[db/interfaces/base.py<br/>BaseDatabase, BaseRepository]
-
-    MODEL[models/paper.py<br/>Paper ORM]
-    SASK[schemas/api/ask.py<br/>AskRequest, AskResponse]
-    SARX[schemas/arxiv/paper.py<br/>ArxivPaper, PaperCreate]
-    SPDF[schemas/pdf_parser/models.py<br/>PdfContent, ParsedPaper]
-    SDB[schemas/database/config.py<br/>PostgreSQLSettings]
-    CFG[config.py<br/>Settings + all *Settings]
-    EXC[exceptions.py]
-
-    main --> MW
-    main --> RPING
-    main --> RHYB
-    main --> RASK
+    main --> routers
     main --> DEPS
-
-    RASK --> DEPS
-    RASK --> SASK
-    RHYB --> DEPS
-    RPING --> DEPS
-
-    DEPS --> OSC
-    DEPS --> EMB
-    DEPS --> OAI
+    routers --> DEPS
     DEPS --> CCH
-    DEPS --> AC
-    DEPS --> PP
+    DEPS --> EMB
+    DEPS --> OSC
+    DEPS --> OAI
 
-    MF --> REPO
+    RASK -. uses .-> CCH
+    RASK -. uses .-> EMB
+    RASK -. uses .-> OSC
+    RASK -. uses .-> OAI
+```
+
+**Flow per `/ask` request:** check cache → embed query → OpenSearch retrieve → LLM generate → store in cache.
+
+---
+
+### 2B. Write path — Airflow DAG ingests papers
+
+```mermaid
+graph TD
+    subgraph entry[Airflow DAG]
+        DAG[arxiv_paper_ingestion_and_indexing.py]
+        FETCH[arxiv_ingestion/fetching.py]
+        INDEX[arxiv_ingestion/indexing.py]
+    end
+
+    subgraph orch[Orchestrator]
+        MF[services/metadata_fetcher.py<br/>MetadataFetcher]
+        IDX[services/indexing/hybrid_indexer.py<br/>HybridIndexingService]
+    end
+
+    subgraph services[Services - write path]
+        AC[arxiv/client.py<br/>ArxivClient]
+        PP[pdf_parser/parser.py<br/>PDFParserService]
+        CHK[indexing/text_chunker.py<br/>TextChunker]
+        EMB2[embeddings/openai_client.py<br/>OpenAIEmbeddingsClient]
+        OSC2[opensearch/client.py<br/>OpenSearchClient]
+    end
+
+    subgraph dataaccess[Data Access]
+        REPO[repositories/paper.py<br/>PaperRepository]
+        DBF[db/factory.py + interfaces/postgresql.py<br/>PostgreSQLDatabase]
+        MODEL[models/paper.py<br/>Paper ORM]
+    end
+
+    DAG --> FETCH
+    DAG --> INDEX
+
+    FETCH --> MF
     MF --> AC
     MF --> PP
-    MF --> SARX
-    MF --> SPDF
-    MF --> CFG
-    MF --> EXC
-
-    AC --> CFG
-    AC --> EXC
-    AC --> SARX
-    PP --> DP
-    PP --> EXC
-    PP --> SPDF
-    DP --> EXC
-    DP --> SPDF
-
-    IDX --> OSC
-    IDX --> EMB
-    IDX --> CHK
-
-    OAI --> CFG
-    CCH --> CFG
-    CCH --> SASK
-
+    MF --> REPO
     REPO --> MODEL
-    REPO --> SARX
+    REPO --> DBF
 
-    DBF --> CFG
-    DBF --> DBASE
-    DBF --> PG
-    DBF --> SDB
-    PG --> DBASE
-    PG --> SDB
-    MODEL --> PG
+    INDEX --> IDX
+    IDX --> CHK
+    IDX --> EMB2
+    IDX --> OSC2
 ```
+
+**Flow per DAG run:** arXiv fetch → Docling parse → Postgres upsert → chunk → embed → OpenSearch bulk-index.
 
 ---
 

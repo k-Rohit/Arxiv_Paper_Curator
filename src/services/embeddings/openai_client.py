@@ -3,6 +3,7 @@
 import logging
 from typing import List
 from openai import AsyncOpenAI
+from langsmith import traceable
 from src.config import OpenAIEmbeddingsSettings
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class OpenAIEmbeddingsClient:
             f"model={settings.model}, dimensions={settings.dimensions}"
         )
 
+    @traceable(name="embed_batch", run_type="llm")
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """Embed multiple texts. Auto-batches into groups of self.settings.batch_size.
 
@@ -56,6 +58,7 @@ class OpenAIEmbeddingsClient:
 
         return all_vectors
 
+    @traceable(name="embed_text", run_type="llm")
     async def embed_text(self, text: str) -> List[float]:
         """Embed a single string.
 

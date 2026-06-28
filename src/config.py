@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from functools import lru_cache
 from typing import List, Literal, Optional
 
 from pydantic import AliasChoices, Field, field_validator
@@ -159,6 +160,6 @@ class Settings(BaseConfigSettings):
     openai_client: OpenAIClientSettings = Field(default_factory=OpenAIClientSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     
-    
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()

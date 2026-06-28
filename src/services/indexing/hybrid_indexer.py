@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, List
-
+from langsmith import traceable
 from src.services.embeddings.openai_client import OpenAIEmbeddingsClient
 from src.services.opensearch.client import OpenSearchClient
 
@@ -31,6 +31,7 @@ class HybridIndexingService:
         self.opensearch_client = opensearch_client
         logger.info("Hybrid indexing service initialized")
 
+    @traceable(name="index_paper")
     async def index_paper(self, paper_data: Dict) -> Dict[str, int]:
         """Index a single paper with chunking and embeddings."""
         arxiv_id = paper_data.get("arxiv_id")
@@ -115,6 +116,7 @@ class HybridIndexingService:
             logger.error(f"Error indexing paper {arxiv_id}: {e}")
             return {"chunks_created": 0, "chunks_indexed": 0, "embeddings_generated": 0, "errors": 1}
 
+    @traceable(name="index_paper_batch")
     async def index_papers_batch(
         self,
         papers: List[Dict],

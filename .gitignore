@@ -218,3 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 .vscode
+
+# Local-only docs (not committed)
+PROJECT_MAP.md
+AGENTS_GUIDE.md

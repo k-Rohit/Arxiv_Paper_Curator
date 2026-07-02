@@ -127,7 +127,6 @@ class GradingResult(BaseModel):
 
     document_id: str = Field(description="Document identifier")
     is_relevant: bool = Field(description="Relevance flag")
-    score: float = Field(default=0.0, description="Relevance score")
     reasoning: str = Field(default="", description="Grading reasoning")
 
 

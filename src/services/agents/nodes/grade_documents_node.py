@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
+from dotenv import load_dotenv
 
 from ..config  import GraphConfig
 from ..models  import GradeDocuments, GradingResult
@@ -14,6 +15,7 @@ from .utils    import get_latest_context, get_latest_query
 
 logger = logging.getLogger(__name__)
 config = GraphConfig()
+load_dotenv()
 
 
 async def ainvoke_grade_retrieved_chunks(state: AgentState) -> Dict[str, Any]:
@@ -29,28 +31,32 @@ async def ainvoke_grade_retrieved_chunks(state: AgentState) -> Dict[str, Any]:
     llm_model  = ChatOpenAI(model=config.model, temperature=config.temperature)
     grader_llm = llm_model.with_structured_output(GradeDocuments)
 
-    results: GradeDocuments = await grader_llm.ainvoke(grading_prompt)   # ← added await
+    results: GradeDocuments = await grader_llm.ainvoke(grading_prompt)
 
     is_relevant = results.binary_score == "yes"
     route       = "generate_answer" if is_relevant else "rewrite_query"
-
+    
+    grading_result = GradingResult(
+        document_id="retrieved_batch",
+        is_relevant=is_relevant,
+        reasoning=results.reasoning
+    )
     logger.info(f"grade={results.binary_score} route={route} took={time.time()-start_time:.2f}s")
 
     return {
-"routing_decision": route,
-"grading_results":  [results],
-}
+        "routing_decision": route,
+        "grading_results":  [grading_result],
+    }
+    
 
 
 # ─── quick manual test ──────────────────────────────────────────────
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
-    # ── Case 1: RELEVANT chunks
     good_state: AgentState = {
         "messages": [
             HumanMessage(content="What is multi-head attention in transformers?"),
-            # (skipping the AIMessage tool_call for brevity — we only need the ToolMessage)
             ToolMessage(
                 content=(
                     "[1706.03762] Multi-head attention allows the model to jointly attend "
@@ -68,7 +74,6 @@ if __name__ == "__main__":
         ],
     }
 
-    # ── Case 2: IRRELEVANT chunks
     bad_state: AgentState = {
         "messages": [
             HumanMessage(content="What is multi-head attention in transformers?"),
@@ -86,13 +91,13 @@ if __name__ == "__main__":
         ],
     }
 
-async def _run():
-    print("\n=== Case 1: RELEVANT chunks ===")
-    result_good = await ainvoke_grade_retrieved_chunks(good_state)
-    print(result_good)
+    async def _run():
+        print("\n=== Case 1: RELEVANT chunks ===")
+        result_good = await ainvoke_grade_retrieved_chunks(good_state)
+        print(result_good)
 
-    print("\n=== Case 2: IRRELEVANT chunks ===")
-    result_bad = await ainvoke_grade_retrieved_chunks(bad_state)
-    print(result_bad)
+        print("\n=== Case 2: IRRELEVANT chunks ===")
+        result_bad = await ainvoke_grade_retrieved_chunks(bad_state)
+        print(result_bad)
 
     asyncio.run(_run())

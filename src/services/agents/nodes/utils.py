@@ -18,7 +18,7 @@ def get_latest_query(messages: List):
         if isinstance(msg, HumanMessage):
             return msg.content
 
-        raise ValueError("No user query found in messages")
+    raise ValueError("No user query found in messages")
 
 def get_latest_context(messages: List):
     """ 

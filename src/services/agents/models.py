@@ -147,3 +147,13 @@ class ReasoningStep(BaseModel):
     step_name: str = Field(description="Name of the reasoning step")
     description: str = Field(description="Human-readable description")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Step metadata")
+
+class QueryRewriteOutput(BaseModel):
+    """Structured output for query rewriting."""
+
+    rewritten_query: str = Field(
+        description="The improved query optimized for document retrieval"
+    )
+    reasoning: str = Field(
+        description="Brief explanation of how the query was improved"
+    )

@@ -16,6 +16,7 @@ from .nodes import (
     ainvoke_generate_answer,
     ainvoke_grade_retrieved_chunks,
     ainvoke_out_of_scope_step,
+    score_user_query,
     route,
     ainvoke_out_of_scope_step,
     initiate_retrieve,
@@ -67,4 +68,75 @@ class AgenticRag:
         logger.info("✓ AgenticRAGService initialized successfully")
     
     def _build_graph(self) -> StateGraph:
-        pass
+        """
+        Builds the whole graph for the agentic RAG service. This includes nodes for retrieval, grading, guardrails, and answer generation.
+        """
+        logger.info("Building LangGraph workflow with context_schema")
+        workflow = StateGraph(AgentState, name="AgenticRAGGraph")
+        
+        # Create tools (these need to be created upfront for ToolNode)
+        retriever_tool = create_retriever_tool(
+        opensearch_client=self.opensearch,
+        embeddings_client=self.embeddings,
+        top_k=self.graph_config.top_k,
+        use_hybrid=self.graph_config.use_hybrid,
+        )
+        tools = [retriever_tool]
+        
+        # Add nodes
+        logger.info("Adding nodes to workflow graph")
+        workflow.add_node('guardrail_node',score_user_query)
+        workflow.add_node('retrieve_node',initiate_retrieve)
+        workflow.add_node('out_of_scope_node',ainvoke_out_of_scope_step)
+        workflow.add_node("tool_retrieve", ToolNode(tools))
+        workflow.add_node('grade_document_node',ainvoke_grade_retrieved_chunks)
+        workflow.add_node('rewrite_query_node',rewrite_query)
+        workflow.add_node('generate_answer_node',ainvoke_generate_answer)
+        
+        # Add edges
+        logger.info("Configuring graph edges and routing logic")
+        
+        workflow.add_edge(START, "guardrail_node")
+        workflow.add_conditional_edges(
+            "guardrail_node",
+            route,
+            {
+                "continue": "retrieve_node",
+                "out_of_scope" : "out_of_scope_node"
+            }
+        )
+        workflow.add_edge("out_of_scope_node", END)
+        workflow.add_conditional_edges(
+            "retrieve_node",
+            tools_condition,
+            {
+                "tools": "tool_retrieve",
+                END: END
+            }
+        )
+        workflow.add_edge("tool_retrieve", "grade_documents")
+        # After grading → route based on relevance
+        workflow.add_conditional_edges(
+            "grade_documents",
+            lambda state: state.get("routing_decision", "generate_answer"),
+            {
+                "generate_answer": "generate_answer_node",
+                "rewrite_query": "rewrite_query_node",
+            },
+        )
+        # After rewriting → try retrieve again
+        workflow.add_edge("rewrite_query_node","retrieve_node")
+        
+        # After answer generation → done
+        workflow.add_edge("generate_answer", END)
+        
+        # Compile graph
+        logger.info("Compiling LangGraph workflow")
+        compiled_graph = workflow.compile()
+        logger.info("✓ Graph compilation successful")
+
+        return compiled_graph
+        
+        
+        
+        

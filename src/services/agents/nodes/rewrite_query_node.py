@@ -1,68 +1,67 @@
-import asyncio
 import logging
 import time
-from typing import Dict, List
+from typing import Any, Dict
 
 from dotenv import load_dotenv
-from langchain_core.messages import  HumanMessage, ToolMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
+from langgraph.runtime import Runtime
 
-from src.services.agents.config  import GraphConfig
-from src.services.agents.prompts import REWRITE_PROMPT
-from src.services.agents.state   import AgentState
-from src.services.agents.nodes.utils    import get_latest_query
-from src.services.agents.models import QueryRewriteOutput
-
+from ..context import Context
+from ..models  import QueryRewriteOutput
+from ..prompts import REWRITE_PROMPT
+from ..state   import AgentState
+from .utils    import get_latest_query
 
 logger = logging.getLogger(__name__)
-config = GraphConfig()
 load_dotenv()
 
-async def rewrite_query(state: AgentState) -> Dict[str, str | List]:
-    """Rewrite the original query for better document retrieval using LLM.
 
-    This node uses an LLM to intelligently rewrite the user's query
-    to improve the chances of finding relevant documents.
-
-    :param state: Current agent state
-    :returns: Dictionary with rewritten_query and updated messages
-    """
+async def rewrite_query(
+    state: AgentState,
+    runtime: Runtime[Context],
+) -> Dict[str, Any]:
+    """Rewrite the original query for better retrieval using the LLM."""
     logger.info("NODE: rewrite_query")
     start_time = time.time()
-    
-    # Get the original question - 
-    original_query = state.get("original_query") or get_latest_query(state["messages"])
-    current_attemps = state.get("retrieval_attempts",0)
-    rewritten_query = ""
-    reasoning = ""
-    
-    if current_attemps < config.max_retrieval_attempts:
-        try:
-            model = ChatOpenAI(model=config.model, temperature=0.4)
-            query_rewriter = model.with_structured_output(QueryRewriteOutput)
-            query_rewriter_prompt = REWRITE_PROMPT.format(question=original_query)
-            response: QueryRewriteOutput = await query_rewriter.ainvoke(query_rewriter_prompt)
-            if not response or not response.rewritten_query:
-                raise ValueError("LLM failed to return valid structured output for query rewriting")
-            
-            rewritten_query = response.rewritten_query.strip()
-            reasoning = response.reasoning
-            logger.info(
-            f"'{original_query[:50]}...' -> '{rewritten_query[:50]}...'"
-            )
-            logger.debug(f"Rewriting reasoning: {reasoning}")
-            return {
-                "messages" : [HumanMessage(content=rewrite_query)],
-                "rewritten_query" : rewritten_query
-            }
-        except Exception as e:
-            logger.error(f"Failed to rewrite query using LLM: {e}")
-            logger.warning("Falling back to simple keyword expansion")
-            # Fallback to simple expansion if LLM fails
-            rewritten_query = f"{original_query} research paper arxiv machine learning"
-            reasoning = "Fallback: Simple keyword expansion due to LLM error"
-    else:
+
+    graph_config     = runtime.context.graph_config
+    original_query   = state.get("original_query") or get_latest_query(state["messages"])
+    current_attempts = state.get("retrieval_attempts", 0)
+
+    rewritten_query = original_query
+    reasoning       = ""
+
+    if current_attempts >= graph_config.max_retrieval_attempts:
+        # Loop cap already hit — skip the LLM call, just pass through
         return {
-                "messages" : [HumanMessage(content=rewrite_query)],
-                "rewritten_query" : rewritten_query
-                }  
+            "messages":        [HumanMessage(content=rewritten_query)],
+            "rewritten_query": rewritten_query,
+        }
+
+    try:
+        model          = ChatOpenAI(model=graph_config.model, temperature=0.4)
+        query_rewriter = model.with_structured_output(QueryRewriteOutput)
+        prompt         = REWRITE_PROMPT.format(question=original_query)
+
+        response: QueryRewriteOutput = await query_rewriter.ainvoke(prompt)
+
+        if not response or not response.rewritten_query:
+            raise ValueError("LLM returned no rewritten query")
+
+        rewritten_query = response.rewritten_query.strip()
+        reasoning       = response.reasoning
+
+        logger.info(f"rewrite: '{original_query[:50]}...' -> '{rewritten_query[:50]}...'")
+        logger.debug(f"reasoning: {reasoning}")
+
+    except Exception as e:
+        logger.error(f"LLM rewrite failed: {e} — falling back to keyword expansion")
+        rewritten_query = f"{original_query} research paper arxiv machine learning"
+        reasoning       = "Fallback: simple keyword expansion"
+
+    logger.info(f"took={time.time() - start_time:.2f}s")
+    return {
+        "messages":        [HumanMessage(content=rewritten_query)],
+        "rewritten_query": rewritten_query,
+    }

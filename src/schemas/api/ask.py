@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,4 +55,21 @@ class AskResponse(BaseModel):
                 "search_mode": "hybrid",
             }
         }
+    )
+
+
+class AgenticAskResponse(AskResponse):
+    """Response model for the agentic RAG endpoint.
+
+    Extends AskResponse with agent-specific fields (rich sources + reasoning steps).
+    Existing `sources: List[str]` field stays for backward compatibility.
+    """
+
+    sources_detailed: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Rich source citations (arxiv_id, title, authors, url, relevance_score).",
+    )
+    reasoning_steps: List[str] = Field(
+        default_factory=list,
+        description="Ordered list of what the agent did (guardrail, retrieve, grade, generate).",
     )

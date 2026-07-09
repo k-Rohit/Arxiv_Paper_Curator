@@ -15,13 +15,14 @@ from fastapi import FastAPI
 from src.config import get_settings
 from src.db.factory import make_database
 from src.middlewares import RequestLoggingMiddleware
+from src.services.agents.factory import make_agentic_rag
 from src.services.arxiv.factory import make_arxiv_client
 from src.services.cache.factory import make_cache_client
 from src.services.embeddings.factory import make_openai_embeddings_client
 from src.services.openai_.factory import make_openai_client
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.pdf_parser.factory import make_pdf_parser_service
-from src.routers import ask, hybrid_search, ping
+from src.routers import agentic_ask, ask, hybrid_search, ping
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,7 +64,11 @@ async def lifespan(app: FastAPI):
         app.state.cache = None
         logger.warning(f"Cache disabled — Redis unavailable: {e}")
 
-    logger.info("All services initialized: arxiv, pdf_parser, embeddings, llm, cache")
+    # Agentic RAG (compiles the LangGraph once at startup)
+    app.state.agentic_rag = make_agentic_rag()
+    logger.info("Agentic RAG service ready")
+
+    logger.info("All services initialized: arxiv, pdf_parser, embeddings, llm, cache, agentic_rag")
 
     logger.info("API ready")
     yield
@@ -87,6 +92,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.include_router(ping.router,          prefix="/api/v1")
 app.include_router(hybrid_search.router, prefix="/api/v1")
 app.include_router(ask.router,           prefix="/api/v1")
+app.include_router(agentic_ask.router,   prefix="/api/v1")
 
 
 if __name__ == "__main__":

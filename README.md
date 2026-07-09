@@ -1,6 +1,6 @@
 # Arxiv Paper Curator
 
-A production-style **retrieval-augmented generation (RAG) pipeline for arXiv research papers** — fetch new papers daily, parse them with a structure-aware PDF model, store metadata in Postgres, chunk + embed each paper, serve hybrid (BM25 + vector) semantic search via OpenSearch, and answer questions over the corpus with a cached LLM-backed Q&A endpoint.
+A end-to-end production RAG system for arXiv papers. Daily Airflow ingestion pipeline, section-aware chunking, hybrid BM25+HNSW retrieval with RRF fusion, FastAPI Q&A endpoint with Redis caching, and an agentic layer on LangGraph with guardrails, document grading, and query-rewrite retry loop. Runs on Docker Compose. Traced with LangSmith
 
 Built as a hands-on learning project, closely following the [`jamwithai/production-agentic-rag-course`](https://github.com/jamwithai/production-agentic-rag-course) curriculum (currently at **week 6** territory — cache + LLM Q&A done; Langfuse, agentic RAG, and UI next), with some intentional deviations (OpenAI for both embeddings and chat in place of Jina + Ollama, per-concern file split in the Airflow DAG, etc.).
 

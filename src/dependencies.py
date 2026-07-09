@@ -26,6 +26,7 @@ from src.services.embeddings.openai_client import OpenAIEmbeddingsClient
 from src.services.openai_.client import OpenAIClient
 from src.services.opensearch.client import OpenSearchClient
 from src.services.pdf_parser.parser import PDFParserService
+from src.services.agents.agentic_rag import AgenticRag
 
 
 # ─── Settings ───────────────────────────────────────────────────────────
@@ -86,6 +87,9 @@ def get_llm_client(request: Request) -> OpenAIClient:
 def get_cache(request: Request) -> CacheClient | None:
     """Get the shared cache client (may be None if Redis is unavailable)."""
     return request.app.state.cache
+
+def get_agentic_rag(request: Request) -> AgenticRag:
+    return request.app.state.agentic_rag
 
 
 # ─── Annotated type aliases (what routes actually use) ──────────────────

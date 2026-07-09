@@ -232,4 +232,27 @@ class AgenticRag:
         steps.append("Generated answer from context")
 
         return steps
-            
+
+    def visualize(self, format: str = "mermaid") -> str | bytes:
+        """Visualize the compiled graph in mermaid, png, or ascii form.
+
+        :param format: One of "mermaid", "png", "ascii"
+        :returns:      str for "mermaid"/"ascii", bytes for "png"
+        :raises ValueError: for unknown formats
+        """
+        drawers = {
+            "mermaid": lambda g: g.draw_mermaid(),
+            "png":     lambda g: g.draw_mermaid_png(),
+            "ascii":   lambda g: g.draw_ascii(),
+        }
+        if format not in drawers:
+            raise ValueError(f"Unknown format {format!r}. Use one of: {list(drawers)}")
+
+        logger.info(f"Generating graph visualization: format={format}")
+        try:
+            output = drawers[format](self.graph.get_graph())
+            logger.info(f"✓ Generated {format} visualization")
+            return output
+        except Exception as e:
+            logger.error(f"Failed to generate {format} visualization: {e}")
+            raise

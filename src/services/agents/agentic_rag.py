@@ -175,10 +175,11 @@ class AgenticRag:
         logger.info(f"Invoking graph for user_id={user_id} query={query[:80]!r}")
         result = await self.graph.ainvoke(state_input, context=runtime_context)
 
-        answer = self._extract_answer(result)
         return {
             "query":              query,
-            "answer":             answer,
+            "answer":             self._extract_answer(result),
+            "sources":            self._extract_sources(result),
+            "reasoning_steps":    self._extract_reasoning_steps(result),
             "retrieval_attempts": result.get("retrieval_attempts", 0),
             "grading_results":    result.get("grading_results", []),
         }
@@ -192,7 +193,7 @@ class AgenticRag:
         return "No answer generated."
 
     @staticmethod
-    def _extract_sources(result: dict) -> str:
+    def _extract_sources(result: dict) -> list:
         """
         This method is used for extracting the sources from the generated answer
         """

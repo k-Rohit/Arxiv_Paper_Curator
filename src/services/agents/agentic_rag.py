@@ -233,11 +233,12 @@ class AgenticRag:
 
         return steps
 
-    def visualize(self, format: str = "mermaid") -> str | bytes:
+    def visualize(self, format: str = "mermaid", save_to: str | None = None) -> str | bytes:
         """Visualize the compiled graph in mermaid, png, or ascii form.
 
-        :param format: One of "mermaid", "png", "ascii"
-        :returns:      str for "mermaid"/"ascii", bytes for "png"
+        :param format:  One of "mermaid", "png", "ascii"
+        :param save_to: Optional path to save the output (e.g. "graph.png")
+        :returns:       str for "mermaid"/"ascii", bytes for "png"
         :raises ValueError: for unknown formats
         """
         drawers = {
@@ -251,7 +252,13 @@ class AgenticRag:
         logger.info(f"Generating graph visualization: format={format}")
         try:
             output = drawers[format](self.graph.get_graph())
-            logger.info(f"✓ Generated {format} visualization")
+            if save_to:
+                mode = "wb" if isinstance(output, bytes) else "w"
+                with open(save_to, mode) as f:
+                    f.write(output)
+                logger.info(f"✓ Saved {format} visualization to {save_to}")
+            else:
+                logger.info(f"✓ Generated {format} visualization")
             return output
         except Exception as e:
             logger.error(f"Failed to generate {format} visualization: {e}")

@@ -2,7 +2,7 @@
 
 A end-to-end production RAG system for arXiv papers. Daily Airflow ingestion pipeline, section-aware chunking, hybrid BM25+HNSW retrieval with RRF fusion, FastAPI Q&A endpoint with Redis caching, and an agentic layer on LangGraph with guardrails, document grading, and query-rewrite retry loop. Runs on Docker Compose. Traced with LangSmith
 
-Built as a hands-on learning project, closely following the [`jamwithai/production-agentic-rag-course`](https://github.com/jamwithai/production-agentic-rag-course) curriculum (currently at **week 6** territory — cache + LLM Q&A done; Langfuse, agentic RAG, and UI next), with some intentional deviations (OpenAI for both embeddings and chat in place of Jina + Ollama, per-concern file split in the Airflow DAG, etc.).
+Built as a hands-on learning project, closely following the [`jamwithai/production-agentic-rag-course`](https://github.com/jamwithai/production-agentic-rag-course) curriculum (currently at **week 7** territory — agentic RAG service class + LangSmith tracing done; final endpoint wiring + Gradio UI next), with some intentional deviations (OpenAI in place of Jina + Ollama, LangSmith in place of Langfuse, per-concern file split in the Airflow DAG, etc.).
 
 ---
 
@@ -20,18 +20,17 @@ arxiv API  ─▶  fetch metadata (daily)
                        ▼
       FastAPI  ─▶  /hybrid_search  ──▶  BM25 + vector + RRF  ─▶  ranked chunks
                ─▶  /ask            ──▶  Redis exact-match cache  ──▶  HIT? return
-                                                                 ──▶  MISS? retrieval + LLM
-                                                                              │
-                                                                              ▼
-                                                            "what is multi-head attention?"
-                                                                              │
-                                                                              ▼
-                                                       prompt = question + top-K chunks
-                                                       OpenAI gpt-4o-mini
-                                                       answer + arxiv_id sources
+               │                                                 ──▶  MISS? retrieval + LLM ─▶ answer
+               │
+               └▶  /agentic_ask    ──▶  LangGraph:
+                                        guardrail  → out_of_scope?  → refuse
+                                        retrieve   → grade chunks   → route
+                                                  ├─ relevant       → generate answer
+                                                  └─ not relevant   → rewrite query → retry (up to N)
+                                        (every LLM call auto-traced in LangSmith)
 ```
 
-One Airflow DAG owns the write path. A FastAPI service (`/api/v1/ping`, `/api/v1/hybrid_search`, `/api/v1/ask`) owns the read path, with a Redis cache layer and graceful degradation if Redis is unavailable. Observability (Langfuse), agentic retrieval, and a Gradio chat UI are next.
+One Airflow DAG owns the write path. A FastAPI service (`/api/v1/ping`, `/api/v1/hybrid_search`, `/api/v1/ask`, `/api/v1/agentic_ask`) owns the read path. Redis caches `/ask` responses with graceful degradation; LangSmith traces every LLM call in the agentic flow. A Gradio chat UI is next.
 
 ---
 
@@ -55,8 +54,9 @@ One Airflow DAG owns the write path. A FastAPI service (`/api/v1/ping`, `/api/v1
 | `/api/v1/hybrid_search` retrieval endpoint | ✅ |
 | `/api/v1/ask` RAG Q&A endpoint (retrieve → LLM → answer) | ✅ |
 | Redis exact-match cache for `/ask` (with graceful degrade) | ✅ |
-| **Langfuse tracing / observability** | ⏳ planned |
-| **Agentic RAG (LangGraph: grade → rewrite → guardrails)** | ⏳ planned |
+| **Agentic RAG service** — LangGraph nodes (guardrail, retrieve, grade, rewrite, generate, out_of_scope), Context DI, compiled graph | ✅ |
+| **LangSmith tracing / observability** (auto-traces every LangGraph node + LLM call) | ✅ |
+| **`/api/v1/agentic_ask` endpoint** (final wiring: main.py lifespan + router body) | 🚧 in progress |
 | **Gradio chat UI** for "talk to the papers" | ⏳ planned |
 | Telegram bot interface | ⏳ planned |
 | Eval harness (RAG quality + LLM-as-judge) | ⏳ planned |
@@ -70,13 +70,14 @@ End-to-end pipeline verified via [`notebooks/end-to-end-pipeline.ipynb`](noteboo
 ```
 ENTRYPOINTS         FastAPI app (src/main.py)  ·  Airflow DAGs  ·  Notebooks
        ↓
-ROUTERS             routers/ping  ·  routers/hybrid_search  ·  routers/ask
+ROUTERS             routers/ping  ·  routers/hybrid_search  ·  routers/ask  ·  routers/agentic_ask
        ↓
-DI LAYER            dependencies.py  (typed Annotated aliases — SessionDep, OpenSearchDep, LLMDep, CacheDep…)
+DI LAYER            dependencies.py  (typed Annotated aliases — SessionDep, OpenSearchDep, LLMDep, CacheDep, AgenticRagDep…)
        ↓
-ORCHESTRATOR        src/services/metadata_fetcher.py  (the ingestion hub)
+ORCHESTRATOR        src/services/metadata_fetcher.py  (the ingestion hub — write path)
+                    src/services/agents/AgenticRag    (the LangGraph orchestrator — agentic read path)
        ↓
-SERVICES            arxiv/  ·  pdf_parser/  ·  opensearch/  ·  embeddings/  ·  indexing/  ·  openai_/  ·  cache/
+SERVICES            arxiv/  ·  pdf_parser/  ·  opensearch/  ·  embeddings/  ·  indexing/  ·  openai_/  ·  cache/  ·  agents/
        ↓
 DATA ACCESS         repositories/PaperRepository  ·  db/PostgreSQLDatabase
        ↓
@@ -107,9 +108,10 @@ For the full picture (per-file imports/imported-by, mermaid graph, gotchas) see 
 | Search | OpenSearch 2.19 (BM25 + k-NN with HNSW, RRF fusion) |
 | PDF parsing | [Docling](https://github.com/DS4SD/docling) (IBM) |
 | Embeddings | OpenAI `text-embedding-3-small` (1024 dims via Matryoshka) |
-| LLM | OpenAI `gpt-4o-mini` (chat completion) |
+| LLM | OpenAI `gpt-4o-mini` (chat completion + structured Pydantic outputs) |
+| Agent framework | LangGraph (StateGraph + Context DI + ToolNode + conditional edges) |
+| Agent tracing | LangSmith (auto-instruments every LangGraph node + LLM call via `LANGCHAIN_TRACING_V2=true`) |
 | Cache | Redis 7 (exact-match, normalized-query key, 6h TTL) |
-| Observability | Langfuse (planned) |
 | Container runtime | Docker Compose |
 | Linting | Ruff (I, F, E, W, B, RET, SIM, UP) |
 
@@ -131,7 +133,11 @@ uv sync
 
 # 2. Configure secrets — copy and edit
 cp .env.example .env       # (create one from your existing if missing)
-# Set OPENAI_API_KEY=sk-...
+# Set:
+#   OPENAI_API_KEY=sk-...
+#   LANGCHAIN_TRACING_V2=true       # enable LangSmith auto-tracing
+#   LANGCHAIN_API_KEY=lsv2_pt_...   # from smith.langchain.com
+#   LANGCHAIN_PROJECT=arxiv-paper-curator
 
 # 3. Bring up the infrastructure (Postgres + Airflow only — most common dev mode)
 docker compose up -d --build postgres airflow
@@ -139,7 +145,7 @@ docker compose up -d --build postgres airflow
 # 4. Or bring up the full read path (search + cache + LLM)
 docker compose up -d postgres opensearch redis api
 
-# 5. Or bring up everything (Postgres + Airflow + OpenSearch + Dashboards + Redis + Langfuse stack)
+# 5. Or bring up everything (Postgres + Airflow + OpenSearch + Dashboards + Redis + API)
 make start
 ```
 
@@ -167,6 +173,11 @@ curl -X POST http://localhost:8000/api/v1/hybrid_search \
 curl -X POST http://localhost:8000/api/v1/ask \
   -H 'Content-Type: application/json' \
   -d '{"query": "what is multi-head attention?", "top_k": 5, "use_hybrid": true}'
+
+# Agentic Q&A (guardrail + retrieve + grade + optional rewrite loop + generate; auto-traced in LangSmith)
+curl -X POST http://localhost:8000/api/v1/agentic_ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "how does BERT differ from GPT?"}'
 
 # Inspect Redis cache
 docker exec rag-redis redis-cli KEYS 'exact_cache:*'
@@ -207,6 +218,7 @@ This repo isn't a clone — a few intentional changes:
 |---|---|---|
 | Embeddings provider | Jina (1024-dim via API) | OpenAI `text-embedding-3-small` (1024 dims, configurable) |
 | LLM | Ollama (local, e.g. `llama3.2`) | OpenAI `gpt-4o-mini` (Mac can't run local models comfortably) |
+| Observability | Langfuse (self-hosted; 5 docker services) | LangSmith (hosted; 2 env vars, zero infra, auto-traces LangGraph via `LANGCHAIN_TRACING_V2=true`) |
 | Airflow DAG layout | Single `tasks.py` | Split per concern: `common.py`, `fetching.py`, `setup.py`, `reporting.py`, `indexing.py` |
 | Settings split | Mostly inline | Per-domain `*Settings` classes (`OpenAIEmbeddingsSettings`, `OpenAIClientSettings`, `RedisSettings`) as typed sub-configs under `Settings` |
 | Per-folder READMEs | None | Every `src/` subfolder has a README explaining files + connections |

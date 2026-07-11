@@ -2,7 +2,7 @@
 
 A end-to-end production RAG system for arXiv papers. Daily Airflow ingestion pipeline, section-aware chunking, hybrid BM25+HNSW retrieval with RRF fusion, FastAPI Q&A endpoint with Redis caching, and an agentic layer on LangGraph with guardrails, document grading, and query-rewrite retry loop. Runs on Docker Compose. Traced with LangSmith
 
-Built as a hands-on learning project, closely following the [`jamwithai/production-agentic-rag-course`](https://github.com/jamwithai/production-agentic-rag-course) curriculum (currently at **week 7** territory — agentic RAG service class + LangSmith tracing done; final endpoint wiring + Gradio UI next), with some intentional deviations (OpenAI in place of Jina + Ollama, LangSmith in place of Langfuse, per-concern file split in the Airflow DAG, etc.).
+Built as a hands-on learning project, closely following the [`jamwithai/production-agentic-rag-course`](https://github.com/jamwithai/production-agentic-rag-course) curriculum (**week 7 complete** — agentic RAG + LangSmith tracing + chat UI all shipped), with some intentional deviations (OpenAI in place of Jina + Ollama, LangSmith in place of Langfuse, a hand-built chat UI in place of Gradio, per-concern file split in the Airflow DAG, etc.).
 
 ---
 
@@ -30,7 +30,7 @@ arxiv API  ─▶  fetch metadata (daily)
                                         (every LLM call auto-traced in LangSmith)
 ```
 
-One Airflow DAG owns the write path. A FastAPI service (`/api/v1/ping`, `/api/v1/hybrid_search`, `/api/v1/ask`, `/api/v1/agentic_ask`) owns the read path. Redis caches `/ask` responses with graceful degradation; LangSmith traces every LLM call in the agentic flow. A Gradio chat UI is next.
+One Airflow DAG owns the write path. A FastAPI service (`/api/v1/health`, `/api/v1/hybrid-search`, `/api/v1/ask`, `/api/v1/agentic_ask`) owns the read path. Redis caches `/ask` responses with graceful degradation; LangSmith traces every LLM call in the agentic flow. A built-in chat UI (single self-contained HTML page, no build step) is served at `/` by the same FastAPI process.
 
 ---
 
@@ -56,9 +56,10 @@ One Airflow DAG owns the write path. A FastAPI service (`/api/v1/ping`, `/api/v1
 | Redis exact-match cache for `/ask` (with graceful degrade) | ✅ |
 | **Agentic RAG service** — LangGraph nodes (guardrail, retrieve, grade, rewrite, generate, out_of_scope), Context DI, compiled graph | ✅ |
 | **LangSmith tracing / observability** (auto-traces every LangGraph node + LLM call) | ✅ |
-| **`/api/v1/agentic_ask` endpoint** (final wiring: main.py lifespan + router body) | 🚧 in progress |
-| **Gradio chat UI** for "talk to the papers" | ⏳ planned |
-| Telegram bot interface | ⏳ planned |
+| **`/api/v1/agentic_ask` endpoint** (rich sources + reasoning steps in response) | ✅ |
+| **Chat UI** — hand-built dark-theme chat page served at `/` (endpoint toggle, sources, reasoning steps, latency) | ✅ |
+| Per-service test notebooks (`notebooks/services/01-09`) | ✅ |
+| Telegram bot interface | ⏳ skipped (out of scope) |
 | Eval harness (RAG quality + LLM-as-judge) | ⏳ planned |
 
 End-to-end pipeline verified via [`notebooks/end-to-end-pipeline.ipynb`](notebooks/end-to-end-pipeline.ipynb) — runs every stage against a real paper in ~1 minute.
@@ -112,6 +113,7 @@ For the full picture (per-file imports/imported-by, mermaid graph, gotchas) see 
 | Agent framework | LangGraph (StateGraph + Context DI + ToolNode + conditional edges) |
 | Agent tracing | LangSmith (auto-instruments every LangGraph node + LLM call via `LANGCHAIN_TRACING_V2=true`) |
 | Cache | Redis 7 (exact-match, normalized-query key, 6h TTL) |
+| Chat UI | Single self-contained HTML/CSS/JS page (`src/static/index.html`) served at `/` — no framework, no build step |
 | Container runtime | Docker Compose |
 | Linting | Ruff (I, F, E, W, B, RET, SIM, UP) |
 
@@ -198,7 +200,7 @@ The notebook exercises every service in order: fetch → parse → store → chu
 
 | Service | URL | Auth |
 |---|---|---|
-| FastAPI app | http://localhost:8000 | none |
+| **Chat UI** | http://localhost:8000/ | none |
 | FastAPI OpenAPI docs | http://localhost:8000/docs | none |
 | Airflow UI | http://localhost:8080 | `admin` / `admin` |
 | OpenSearch | http://localhost:9200 | none (security plugin disabled) |

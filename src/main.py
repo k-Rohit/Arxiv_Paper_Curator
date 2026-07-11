@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 
 from src.config import get_settings
 from src.db.factory import make_database
@@ -93,6 +94,15 @@ app.include_router(ping.router,          prefix="/api/v1")
 app.include_router(hybrid_search.router, prefix="/api/v1")
 app.include_router(ask.router,           prefix="/api/v1")
 app.include_router(agentic_ask.router,   prefix="/api/v1")
+
+
+# Chat UI — a single self-contained HTML page served at the root
+_UI_PATH = os.path.join(os.path.dirname(__file__), "static", "index.html")
+
+
+@app.get("/", include_in_schema=False)
+async def chat_ui() -> FileResponse:
+    return FileResponse(_UI_PATH)
 
 
 if __name__ == "__main__":

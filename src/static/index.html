@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>arXiv Paper Curator</title>
+<style>
+  :root {
+    --bg:        #0d1017;
+    --surface:   #151a23;
+    --surface-2: #1c2230;
+    --border:    #262e3f;
+    --text:      #e8eaf0;
+    --muted:     #8b93a7;
+    --accent:    #7c8cf8;
+    --accent-2:  #4f5fd6;
+    --green:     #34d399;
+    --radius:    14px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* ── Header ─────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13,16,23,.85);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .logo {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
+    display: grid; place-items: center; font-size: 17px;
+  }
+  .brand h1 { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+  .brand .sub { font-size: 12px; color: var(--muted); }
+
+  .controls { display: flex; align-items: center; gap: 14px; }
+
+  .seg {
+    display: flex; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 3px;
+  }
+  .seg button {
+    border: 0; background: transparent; color: var(--muted);
+    font: 600 12.5px var(--font); padding: 6px 14px; border-radius: 8px;
+    cursor: pointer; transition: all .15s;
+  }
+  .seg button.active { background: var(--accent-2); color: #fff; }
+
+  .knobs { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+  .knobs label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .knobs input[type=number] {
+    width: 44px; background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px; padding: 4px 7px;
+    font: 600 12.5px var(--font); text-align: center;
+  }
+  .knobs input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+
+  .status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+  .dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(52,211,153,.6); }
+
+  /* ── Chat area ──────────────────────────── */
+  main { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+  .thread { max-width: 780px; margin: 0 auto; padding: 28px 20px 20px; display: flex; flex-direction: column; gap: 22px; }
+
+  .welcome { text-align: center; margin: 10vh 0 0; }
+  .welcome .big { font-size: 42px; margin-bottom: 14px; }
+  .welcome h2 { font-size: 22px; font-weight: 650; margin-bottom: 8px; letter-spacing: -.02em; }
+  .welcome p { color: var(--muted); font-size: 14px; max-width: 460px; margin: 0 auto 26px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .chip {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    border-radius: 999px; padding: 9px 16px; font: 500 13px var(--font);
+    cursor: pointer; transition: all .15s;
+  }
+  .chip:hover { border-color: var(--accent); background: var(--surface-2); transform: translateY(-1px); }
+
+  .msg { display: flex; gap: 12px; animation: rise .25s ease; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+  .msg .avatar {
+    flex: 0 0 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+    font-size: 15px; margin-top: 2px;
+  }
+  .msg.user { flex-direction: row-reverse; }
+  .msg.user .avatar { background: var(--surface-2); }
+  .msg.bot  .avatar { background: linear-gradient(135deg, var(--accent), #a78bfa); }
+
+  .bubble { max-width: 82%; border-radius: var(--radius); padding: 12px 16px; }
+  .msg.user .bubble { background: var(--accent-2); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.bot  .bubble { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+
+  .bubble p { margin-bottom: 8px; } .bubble p:last-child { margin-bottom: 0; }
+  .bubble code { font-family: var(--mono); font-size: 12.5px; background: var(--surface-2); padding: 2px 6px; border-radius: 5px; }
+  .bubble pre { background: var(--surface-2); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0; }
+  .bubble pre code { background: none; padding: 0; }
+  .bubble a { color: var(--accent); text-decoration: none; }
+  .bubble a:hover { text-decoration: underline; }
+  .bubble ul, .bubble ol { padding-left: 20px; margin: 6px 0; }
+  .bubble strong { font-weight: 650; }
+
+  /* meta row under bot answers */
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .tag {
+    font: 600 11px var(--font); color: var(--muted);
+    background: var(--surface-2); border-radius: 6px; padding: 3px 9px;
+  }
+  .tag.src { color: var(--accent); cursor: pointer; }
+  .tag.src:hover { background: var(--accent-2); color: #fff; }
+
+  details.steps { margin-top: 10px; }
+  details.steps summary {
+    cursor: pointer; font: 600 12px var(--font); color: var(--muted);
+    list-style: none; display: flex; align-items: center; gap: 6px;
+  }
+  details.steps summary::before { content: "▸"; transition: transform .15s; }
+  details.steps[open] summary::before { transform: rotate(90deg); }
+  details.steps ol { margin: 8px 0 0 6px; padding-left: 18px; font-size: 13px; color: var(--muted); }
+  details.steps li { margin-bottom: 3px; }
+
+  .typing { display: flex; gap: 5px; padding: 6px 2px; }
+  .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: .2s; }
+  .typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 70%, 100% { opacity: .25; } 35% { opacity: 1; } }
+
+  .latency { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  /* ── Composer ───────────────────────────── */
+  footer { border-top: 1px solid var(--border); background: var(--bg); padding: 16px 20px 20px; }
+  .composer {
+    max-width: 780px; margin: 0 auto; display: flex; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 8px 8px 8px 18px; align-items: flex-end;
+    transition: border-color .15s;
+  }
+  .composer:focus-within { border-color: var(--accent); }
+  .composer textarea {
+    flex: 1; background: none; border: 0; outline: 0; resize: none;
+    color: var(--text); font: 15px/1.5 var(--font); max-height: 140px; padding: 6px 0;
+  }
+  .composer textarea::placeholder { color: var(--muted); }
+  .send {
+    width: 38px; height: 38px; border-radius: 11px; border: 0; cursor: pointer;
+    background: var(--accent-2); color: #fff; font-size: 16px;
+    display: grid; place-items: center; transition: all .15s; flex-shrink: 0;
+  }
+  .send:hover:not(:disabled) { background: var(--accent); }
+  .send:disabled { opacity: .4; cursor: default; }
+  .hint { text-align: center; font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+
+  @media (max-width: 640px) {
+    .knobs { display: none; }
+    .brand .sub { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">📄</div>
+    <div>
+      <h1>arXiv Paper Curator</h1>
+      <div class="sub">Grounded Q&amp;A over research papers</div>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="seg" id="seg">
+      <button class="active" data-mode="ask" title="One-shot RAG with Redis cache">⚡ Fast</button>
+      <button data-mode="agentic_ask" title="Guardrail → retrieve → grade → rewrite loop">🤖 Agentic</button>
+    </div>
+    <div class="knobs" id="knobs">
+      <label>top_k <input type="number" id="topk" value="5" min="1" max="10"></label>
+      <label><input type="checkbox" id="hybrid" checked> hybrid</label>
+    </div>
+    <div class="status"><div class="dot" id="dot"></div><span id="statusText">checking…</span></div>
+  </div>
+</header>
+
+<main id="main">
+  <div class="thread" id="thread">
+    <div class="welcome" id="welcome">
+      <div class="big">📄</div>
+      <h2>Ask the papers anything</h2>
+      <p>Answers are grounded in a daily-ingested arXiv corpus — hybrid BM25 + vector retrieval, with an optional agentic loop that grades and retries.</p>
+      <div class="chips">
+        <button class="chip">How reliable are LLMs at probabilistic reasoning?</button>
+        <button class="chip">What is sim-to-real transfer in manipulation?</button>
+        <button class="chip">What is the capital of France?</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="Ask about a paper…"></textarea>
+    <button class="send" id="send" title="Send">↑</button>
+  </div>
+  <div class="hint">⚡ Fast = cached one-shot RAG &nbsp;·&nbsp; 🤖 Agentic = guardrail + grade + rewrite loop (slower, smarter)</div>
+</footer>
+
+<script>
+const API = "/api/v1";
+let mode = "ask";
+let busy = false;
+
+const $ = (id) => document.getElementById(id);
+const thread = $("thread"), input = $("input"), send = $("send"), main = $("main");
+
+/* ── segmented control ── */
+$("seg").addEventListener("click", (e) => {
+  const btn = e.target.closest("button"); if (!btn) return;
+  mode = btn.dataset.mode;
+  document.querySelectorAll("#seg button").forEach(b => b.classList.toggle("active", b === btn));
+  $("knobs").style.opacity = mode === "ask" ? 1 : .35;
+});
+
+/* ── health check ── */
+(async () => {
+  try {
+    const r = await fetch(`${API}/health`);
+    $("dot").classList.toggle("ok", r.ok);
+    $("statusText").textContent = r.ok ? "API connected" : `API error ${r.status}`;
+  } catch { $("statusText").textContent = "API offline"; }
+})();
+
+/* ── minimal markdown → HTML (bold, italic, code, links, lists) ── */
+function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function md(s) {
+  s = esc(s);
+  s = s.replace(/```([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`);
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  s = s.replace(/^\s*[-•] (.+)$/gm, "<li>$1</li>").replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
+  return s.split(/\n{2,}/).map(p => p.startsWith("<") ? p : `<p>${p.replace(/\n/g,"<br>")}</p>`).join("");
+}
+
+/* ── message rendering ── */
+function addMsg(role, html) {
+  $("welcome")?.remove();
+  const el = document.createElement("div");
+  el.className = `msg ${role}`;
+  el.innerHTML = `
+    <div class="avatar">${role === "user" ? "🧑" : "📄"}</div>
+    <div class="bubble">${html}</div>`;
+  thread.appendChild(el);
+  main.scrollTop = main.scrollHeight;
+  return el.querySelector(".bubble");
+}
+
+function metaRow(data, ms) {
+  let h = `<div class="meta">`;
+  h += `<span class="tag">${data.search_mode || mode}</span>`;
+  h += `<span class="tag">${mode === "agentic_ask" ? "attempts" : "chunks"}: ${data.chunks_used ?? "?"}</span>`;
+  h += `<span class="tag">${(ms/1000).toFixed(1)}s</span>`;
+  (data.sources || []).slice(0, 4).forEach(u => {
+    const name = u.split("/").pop().replace(".pdf","");
+    h += `<a class="tag src" href="${u}" target="_blank">📎 ${name}</a>`;
+  });
+  h += `</div>`;
+  if (data.reasoning_steps?.length) {
+    h += `<details class="steps"><summary>Agent reasoning (${data.reasoning_steps.length} steps)</summary><ol>`;
+    data.reasoning_steps.forEach(s => h += `<li>${esc(s)}</li>`);
+    h += `</ol></details>`;
+  }
+  return h;
+}
+
+/* ── send flow ── */
+async function ask(text) {
+  if (busy || !text.trim()) return;
+  busy = true; send.disabled = true;
+
+  addMsg("user", esc(text));
+  const bubble = addMsg("bot", `<div class="typing"><span></span><span></span><span></span></div>`);
+  const t0 = performance.now();
+
+  const payload = { query: text };
+  if (mode === "ask") {
+    payload.top_k = parseInt($("topk").value) || 5;
+    payload.use_hybrid = $("hybrid").checked;
+  }
+
+  try {
+    const r = await fetch(`${API}/${mode}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const ms = performance.now() - t0;
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      bubble.innerHTML = `<p>⚠️ <strong>${r.status}</strong> — ${esc(err.detail || "request failed")}</p>`;
+    } else {
+      const data = await r.json();
+      bubble.innerHTML = md(data.answer || "(no answer)") + metaRow(data, ms);
+    }
+  } catch {
+    bubble.innerHTML = `<p>⚠️ Can't reach the API. Start it with:</p><pre><code>uv run uvicorn src.main:app --port 8000</code></pre>`;
+  }
+  main.scrollTop = main.scrollHeight;
+  busy = false; send.disabled = false; input.focus();
+}
+
+send.addEventListener("click", () => { ask(input.value); input.value = ""; resize(); });
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(input.value); input.value = ""; resize(); }
+});
+function resize() { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; }
+input.addEventListener("input", resize);
+
+document.querySelectorAll(".chip").forEach(c =>
+  c.addEventListener("click", () => ask(c.textContent)));
+
+input.focus();
+</script>
+</body>
+</html>

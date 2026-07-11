@@ -9,7 +9,7 @@ from src.services.opensearch.client import OpenSearchClient
 logger = logging.getLogger(__name__)
 
 def create_retriever_tool(
-    opensearch_clent: OpenSearchClient,
+    opensearch_client: OpenSearchClient,
     embeddings_client: OpenAIEmbeddingsClient,
     top_k: int = 3,
     use_hybrid: bool = True
@@ -49,7 +49,7 @@ def create_retriever_tool(
         
         # Search using OpenSearch
         logger.debug("Searching OpenSearch")
-        search_results = opensearch_clent.search_unified(
+        search_results = opensearch_client.search_unified(
             query=query,
             query_embedding=query_embeddings,
             size=top_k,

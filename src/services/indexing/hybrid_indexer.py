@@ -89,6 +89,7 @@ class HybridIndexingService:
                     "end_char":          chunk.metadata.end_char,
                     "section_title":     chunk.metadata.section_title,
                     "embedding_model":   embedding_model,
+                    "pdf_url":           f"https://arxiv.org/pdf/{chunk.arxiv_id}.pdf",
                     # Denormalized paper metadata for efficient search
                     "title":          paper_data.get("title", ""),
                     "authors":        authors,

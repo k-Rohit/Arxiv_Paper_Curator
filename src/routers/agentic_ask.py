@@ -8,6 +8,7 @@ LANGCHAIN_TRACING_V2=true is set.
 import logging
 
 from fastapi import APIRouter, HTTPException
+from langsmith import traceable
 
 from src.dependencies import AgenticRagDep
 from src.schemas.api.ask import AgenticAskResponse, AskRequest
@@ -18,6 +19,7 @@ router = APIRouter(tags=["agentic-ask"])
 
 
 @router.post("/agentic_ask", response_model=AgenticAskResponse)
+@traceable(name="agentic_ask_request", run_type="chain")
 async def agentic_ask(
     request: AskRequest,
     agent:   AgenticRagDep,

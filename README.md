@@ -46,38 +46,6 @@ End-to-end pipeline verified via [`notebooks/end-to-end-pipeline.ipynb`](noteboo
 
 ---
 
-## Architecture (the 30-second view)
-
-```
-ENTRYPOINTS         FastAPI app (src/main.py)  ·  Airflow DAGs  ·  Notebooks
-       ↓
-ROUTERS             routers/ping  ·  routers/hybrid_search  ·  routers/ask  ·  routers/agentic_ask
-       ↓
-DI LAYER            dependencies.py  (typed Annotated aliases — SessionDep, OpenSearchDep, LLMDep, CacheDep, AgenticRagDep…)
-       ↓
-ORCHESTRATOR        src/services/metadata_fetcher.py  (the ingestion hub — write path)
-                    src/services/agents/AgenticRag    (the LangGraph orchestrator — agentic read path)
-       ↓
-SERVICES            arxiv/  ·  pdf_parser/  ·  opensearch/  ·  embeddings/  ·  indexing/  ·  openai_/  ·  cache/  ·  agents/
-       ↓
-DATA ACCESS         repositories/PaperRepository  ·  db/PostgreSQLDatabase
-       ↓
-FOUNDATION          config.py  ·  exceptions.py  ·  middlewares.py  ·  models/  ·  schemas/
-```
-
-Dependencies flow **downward** — foundation modules know nothing about the layers above. Every service has a `factory.py` with `@lru_cache`d (or course-style explicit) singleton construction. Services are built **once** at startup in the FastAPI `lifespan` and stored on `app.state`; routers receive them via typed `*Dep` aliases.
-
-For the full picture (per-file imports/imported-by, mermaid graph, gotchas) see **[PROJECT_MAP.md](PROJECT_MAP.md)**. For a focused tour of one folder, each has its own README:
-
-- [`src/db/README.md`](src/db/README.md)
-- [`src/models/README.md`](src/models/README.md)
-- [`src/repositories/README.md`](src/repositories/README.md)
-- [`src/schemas/README.md`](src/schemas/README.md)
-- [`src/services/README.md`](src/services/README.md)
-  - [`arxiv/`](src/services/arxiv/README.md) · [`pdf_parser/`](src/services/pdf_parser/README.md) · [`opensearch/`](src/services/opensearch/README.md) · [`embeddings/`](src/services/embeddings/README.md)
-
----
-
 ## Tech stack
 
 | Layer | Choice |

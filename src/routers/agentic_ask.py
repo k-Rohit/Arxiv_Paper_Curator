@@ -9,6 +9,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from langsmith import traceable
+from langsmith.run_helpers import get_current_run_tree
 
 from src.dependencies import AgenticRagDep
 from src.schemas.api.ask import AgenticAskResponse, AskRequest
@@ -35,6 +36,12 @@ async def agentic_ask(
     """
     logger.info(f"agentic_ask | query={request.query[:80]!r}")
 
+    run_tree = get_current_run_tree()
+    run_id = str(run_tree.id) if run_tree else None
+    if run_tree and request.thread_id:
+        # session_id metadata is what LangSmith's Threads view groups runs by
+        run_tree.add_metadata({"session_id": request.thread_id})
+
     try:
         result = await agent.ask(query=request.query)
     except ValueError as e:
@@ -54,4 +61,5 @@ async def agentic_ask(
         reasoning_steps=result.get("reasoning_steps", []),
         chunks_used=result.get("retrieval_attempts", 0),
         search_mode="agentic",
+        run_id=run_id,
     )

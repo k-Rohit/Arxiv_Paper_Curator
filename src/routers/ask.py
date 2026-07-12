@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from langsmith import traceable
+from langsmith.run_helpers import get_current_run_tree
 
 from src.dependencies import CacheDep, EmbeddingsDep, LLMDep, OpenSearchDep
 from src.schemas.api.ask import AskRequest, AskResponse
@@ -30,6 +31,12 @@ async def ask(
     3. Build a prompt with chunks as context, call the LLM.
     4. Store the response in cache and return.
     """
+    run_tree = get_current_run_tree()
+    run_id = str(run_tree.id) if run_tree else None
+    if run_tree and request.thread_id:
+        # session_id metadata is what LangSmith's Threads view groups runs by
+        run_tree.add_metadata({"session_id": request.thread_id})
+
     # 0. Cache lookup (exact match on request params)
     if cache is not None:
         cached = await cache.find_cached_response(request)
@@ -87,6 +94,7 @@ async def ask(
         sources=sources,
         chunks_used=len(hits),
         search_mode=search_mode,
+        run_id=run_id
     )
 
     # 6. Store in cache for next time (fire-and-forget; cache failures don't break the response)

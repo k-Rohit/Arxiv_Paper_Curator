@@ -23,7 +23,7 @@ from src.services.embeddings.factory import make_openai_embeddings_client
 from src.services.openai_.factory import make_openai_client
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.pdf_parser.factory import make_pdf_parser_service
-from src.routers import agentic_ask, ask, hybrid_search, ping
+from src.routers import agentic_ask, ask, feedback, hybrid_search, ping
 
 logging.basicConfig(
     level=logging.INFO,
@@ -94,6 +94,7 @@ app.include_router(ping.router,          prefix="/api/v1")
 app.include_router(hybrid_search.router, prefix="/api/v1")
 app.include_router(ask.router,           prefix="/api/v1")
 app.include_router(agentic_ask.router,   prefix="/api/v1")
+app.include_router(feedback.router,      prefix="/api/v1")
 
 
 # Chat UI — a single self-contained HTML page served at the root

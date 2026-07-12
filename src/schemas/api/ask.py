@@ -20,6 +20,11 @@ class AskRequest(BaseModel):
     )
     use_hybrid: bool = Field(True, description="Use hybrid search (BM25 + vector)")
     categories: Optional[List[str]] = Field(None, description="Filter by arxiv categories")
+    thread_id: Optional[str] = Field(
+        None,
+        description="Client-generated conversation id. Stamped as session_id on the "
+        "LangSmith trace so all turns of one chat group into a single Thread.",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -41,6 +46,7 @@ class AskResponse(BaseModel):
     sources: List[str] = Field(..., description="PDF URLs of source papers")
     chunks_used: int = Field(..., description="Number of chunks used for generation")
     search_mode: str = Field(..., description="Search mode used: bm25 or hybrid")
+    run_id: Optional[str] = Field(None, description="LangSmith run ID — pass to /feedback to rate this answer")
 
     model_config = ConfigDict(
         json_schema_extra={

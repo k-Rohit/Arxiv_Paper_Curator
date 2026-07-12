@@ -125,6 +125,15 @@
   .tag.src { color: var(--accent); cursor: pointer; }
   .tag.src:hover { background: var(--accent-2); color: #fff; }
 
+  .fb { margin-left: auto; display: flex; gap: 4px; }
+  .fb button {
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+    border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; transition: all .15s;
+  }
+  .fb button:hover { border-color: var(--accent); color: var(--text); }
+  .fb button.chosen { background: var(--accent-2); color: #fff; border-color: var(--accent-2); }
+  .fb button:disabled { cursor: default; opacity: .6; }
+
   details.steps { margin-top: 10px; }
   details.steps summary {
     cursor: pointer; font: 600 12px var(--font); color: var(--muted);
@@ -222,6 +231,9 @@
 const API = "/api/v1";
 let mode = "ask";
 let busy = false;
+// One thread per page load — all turns of this chat group into a single
+// LangSmith Thread (grouped by session_id metadata). Refresh = new thread.
+const THREAD_ID = crypto.randomUUID();
 
 const $ = (id) => document.getElementById(id);
 const thread = $("thread"), input = $("input"), send = $("send"), main = $("main");
@@ -277,6 +289,12 @@ function metaRow(data, ms) {
     const name = u.split("/").pop().replace(".pdf","");
     h += `<a class="tag src" href="${u}" target="_blank">📎 ${name}</a>`;
   });
+  if (data.run_id) {
+    h += `<span class="fb">
+            <button onclick="rate(this, '${data.run_id}', 1)" title="Good answer">👍</button>
+            <button onclick="rate(this, '${data.run_id}', 0)" title="Bad answer">👎</button>
+          </span>`;
+  }
   h += `</div>`;
   if (data.reasoning_steps?.length) {
     h += `<details class="steps"><summary>Agent reasoning (${data.reasoning_steps.length} steps)</summary><ol>`;
@@ -295,7 +313,7 @@ async function ask(text) {
   const bubble = addMsg("bot", `<div class="typing"><span></span><span></span><span></span></div>`);
   const t0 = performance.now();
 
-  const payload = { query: text };
+  const payload = { query: text, thread_id: THREAD_ID };
   if (mode === "ask") {
     payload.top_k = parseInt($("topk").value) || 5;
     payload.use_hybrid = $("hybrid").checked;
@@ -320,6 +338,20 @@ async function ask(text) {
   }
   main.scrollTop = main.scrollHeight;
   busy = false; send.disabled = false; input.focus();
+}
+
+/* ── feedback (👍/👎 → LangSmith via /feedback) ── */
+async function rate(btn, runId, score) {
+  const pair = btn.parentElement.querySelectorAll("button");
+  pair.forEach(b => { b.disabled = true; b.classList.remove("chosen"); });
+  btn.classList.add("chosen");
+  try {
+    await fetch(`${API}/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ run_id: runId, score }),
+    });
+  } catch { /* feedback is best-effort — never break the chat */ }
 }
 
 send.addEventListener("click", () => { ask(input.value); input.value = ""; resize(); });

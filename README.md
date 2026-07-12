@@ -2,33 +2,14 @@
 
 A end-to-end production RAG system for arXiv papers. Daily Airflow ingestion pipeline, section-aware chunking, hybrid BM25+HNSW retrieval with RRF fusion, FastAPI Q&A endpoint with Redis caching, and an agentic layer on LangGraph with guardrails, document grading, and query-rewrite retry loop. Runs on Docker Compose. Traced with LangSmith
 
-Built as a hands-on learning project, closely following the [`jamwithai/production-agentic-rag-course`](https://github.com/jamwithai/production-agentic-rag-course) curriculum (**week 7 complete** — agentic RAG + LangSmith tracing + chat UI all shipped), with some intentional deviations (OpenAI in place of Jina + Ollama, LangSmith in place of Langfuse, a hand-built chat UI in place of Gradio, per-concern file split in the Airflow DAG, etc.).
+Built as a hands-on learning project, closely following the [`jamwithai/production-agentic-rag-course`](https://github.com/jamwithai/production-agentic-rag-course) curriculum , with some intentional deviations (OpenAI in place of Jina + Ollama, LangSmith in place of Langfuse, a hand-built chat UI in place of Gradio, per-concern file split in the Airflow DAG, etc.).
 
 ---
 
-## What it does (end-to-end)
+## Architecture
 
-```
-arxiv API  ─▶  fetch metadata (daily)
-           ─▶  download PDF                              ┐
-           ─▶  parse with Docling (text + sections)      │  Airflow DAG
-           ─▶  upsert into Postgres                      │  (scheduled, idempotent)
-           ─▶  chunk paper (section-aware, ~500-word)    │
-           ─▶  embed chunks (OpenAI text-embedding-3)    │
-           ─▶  bulk-index chunks into OpenSearch         ┘
-                       │
-                       ▼
-      FastAPI  ─▶  /hybrid_search  ──▶  BM25 + vector + RRF  ─▶  ranked chunks
-               ─▶  /ask            ──▶  Redis exact-match cache  ──▶  HIT? return
-               │                                                 ──▶  MISS? retrieval + LLM ─▶ answer
-               │
-               └▶  /agentic_ask    ──▶  LangGraph:
-                                        guardrail  → out_of_scope?  → refuse
-                                        retrieve   → grade chunks   → route
-                                                  ├─ relevant       → generate answer
-                                                  └─ not relevant   → rewrite query → retry (up to N)
-                                        (every LLM call auto-traced in LangSmith)
-```
+<img width="3278" height="1664" alt="Arxiv_Paper_Curator" src="https://github.com/user-attachments/assets/f33e59bf-215a-4704-b5aa-f5d65451957b" />
+
 
 One Airflow DAG owns the write path. A FastAPI service (`/api/v1/health`, `/api/v1/hybrid-search`, `/api/v1/ask`, `/api/v1/agentic_ask`) owns the read path. Redis caches `/ask` responses with graceful degradation; LangSmith traces every LLM call in the agentic flow. A built-in chat UI (single self-contained HTML page, no build step) is served at `/` by the same FastAPI process.
 
@@ -59,7 +40,6 @@ One Airflow DAG owns the write path. A FastAPI service (`/api/v1/health`, `/api/
 | **`/api/v1/agentic_ask` endpoint** (rich sources + reasoning steps in response) | ✅ |
 | **Chat UI** — hand-built dark-theme chat page served at `/` (endpoint toggle, sources, reasoning steps, latency) | ✅ |
 | Per-service test notebooks (`notebooks/services/01-09`) | ✅ |
-| Telegram bot interface | ⏳ skipped (out of scope) |
 | Eval harness (RAG quality + LLM-as-judge) | ⏳ planned |
 
 End-to-end pipeline verified via [`notebooks/end-to-end-pipeline.ipynb`](notebooks/end-to-end-pipeline.ipynb) — runs every stage against a real paper in ~1 minute.

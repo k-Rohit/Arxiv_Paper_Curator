@@ -4,6 +4,7 @@ import json
 import logging
 from typing import Any, Dict, List
 
+from langsmith import traceable
 from openai import AsyncOpenAI
 
 from src.config import OpenAIClientSettings
@@ -40,6 +41,7 @@ class OpenAIClient:
         )
         return response.choices[0].message.content.strip()
 
+    @traceable(name="generate_rag_response", run_type="llm")
     async def generate_rag_response(self, query: str, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
         """End-to-end RAG generation: build prompt → call LLM → parse response.
 

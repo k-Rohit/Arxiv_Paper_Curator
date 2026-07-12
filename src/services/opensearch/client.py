@@ -3,7 +3,9 @@
 import logging
 from typing import Any, Dict, List, Optional
 
+from langsmith import traceable
 from opensearchpy import OpenSearch, helpers
+
 from src.config import Settings
 
 from .index_config_hybrid import ARXIV_PAPERS_CHUNKS_MAPPING, HYBRID_RRF_PIPELINE
@@ -184,6 +186,7 @@ class OpenSearchClient:
             logger.error(f"Vector search error: {e}")
             return {"total": 0, "hits": []}
 
+    @traceable(name="opensearch_search", run_type="retriever")
     def search_unified(
         self,
         query: str,

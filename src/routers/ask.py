@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import APIRouter, HTTPException
+from langsmith import traceable
 
 from src.dependencies import CacheDep, EmbeddingsDep, LLMDep, OpenSearchDep
 from src.schemas.api.ask import AskRequest, AskResponse
@@ -13,6 +14,7 @@ router = APIRouter(tags=["ask"])
 
 
 @router.post("/ask", response_model=AskResponse)
+@traceable(name="ask_request", run_type="chain")
 async def ask(
     request: AskRequest,
     opensearch: OpenSearchDep,

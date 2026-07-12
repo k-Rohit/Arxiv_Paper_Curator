@@ -65,9 +65,12 @@ class TextChunker:
         """Chunk a paper using hybrid section-based approach.
 
         Strategy:
-        - For sections 100-800 words: Use as single chunk with title+abstract
-        - For sections <100 words: Combine with adjacent sections
-        - For sections >800 words: Split using traditional word-based chunking
+        - Abstract becomes ONE dedicated chunk (title + abstract) — it is NOT
+          prepended to every chunk (avoids BM25 skew + duplicated LLM tokens).
+        - Section chunks are prefixed with title + section title only.
+        - For sections 100-800 words: use as a single chunk
+        - For sections <100 words: combine with adjacent sections
+        - For sections >800 words: split using traditional word-based chunking
         - Fallback to traditional chunking if no sections available
 
         :param title: Paper title
@@ -196,9 +199,20 @@ class TextChunker:
             logger.warning(f"No meaningful sections found after filtering for {arxiv_id}")
             return []
 
-        header = f"{title}\n\nAbstract: {abstract}\n\n"
+        # Title-only header per chunk. The abstract gets its OWN chunk below —
+        # prepending it to every chunk skews BM25 (abstract terms match every
+        # chunk of the paper) and duplicates ~150 words per chunk in LLM prompts.
+        header = f"{title}\n\n"
 
         chunks: List[TextChunk] = []
+
+        # Dedicated abstract chunk (chunk 0) so abstract content is retrievable exactly once
+        if abstract and abstract.strip():
+            abstract_chunk_text = f"{title}\n\nAbstract: {abstract}"
+            chunks.append(
+                self._create_section_chunk(abstract_chunk_text, "Abstract", 0, arxiv_id, paper_id)
+            )
+
         small_sections: List = []
 
         section_items = list(sections_dict.items())

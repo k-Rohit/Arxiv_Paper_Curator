@@ -14,8 +14,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ask"])
 
 
+def _trace_inputs(inputs: dict) -> dict:
+    """Record only the request payload in LangSmith — the injected DI clients
+    (opensearch, embedder, llm, cache) aren't serializable and pollute the trace."""
+    req = inputs.get("request")
+    if req is not None and hasattr(req, "model_dump"):
+        return req.model_dump(exclude_none=True)
+    return {}
+
+
 @router.post("/ask", response_model=AskResponse)
-@traceable(name="ask_request", run_type="chain")
+@traceable(name="ask_request", run_type="chain", process_inputs=_trace_inputs)
 async def ask(
     request: AskRequest,
     opensearch: OpenSearchDep,

@@ -19,8 +19,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["agentic-ask"])
 
 
+def _trace_inputs(inputs: dict) -> dict:
+    """Record only the request payload in LangSmith — the injected agent
+    isn't serializable and pollutes the trace inputs."""
+    req = inputs.get("request")
+    if req is not None and hasattr(req, "model_dump"):
+        return req.model_dump(exclude_none=True)
+    return {}
+
+
 @router.post("/agentic_ask", response_model=AgenticAskResponse)
-@traceable(name="agentic_ask_request", run_type="chain")
+@traceable(name="agentic_ask_request", run_type="chain", process_inputs=_trace_inputs)
 async def agentic_ask(
     request: AskRequest,
     agent:   AgenticRagDep,

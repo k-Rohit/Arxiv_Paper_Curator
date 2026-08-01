@@ -157,3 +157,6 @@ class QueryRewriteOutput(BaseModel):
     reasoning: str = Field(
         description="Brief explanation of how the query was improved"
     )
+    
+class CondensedQuery(BaseModel):
+    condensed_query: str = Field(description="The follow-up rewritten as a standalone question")

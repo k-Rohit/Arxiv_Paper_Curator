@@ -127,3 +127,13 @@ Instructions:
 - Do NOT make up information or cite papers not in the retrieved context
 
 Answer:"""
+
+CONDENSE_PROMPT = """Given the conversation history and a follow-up question, rewrite the follow-up into a standalone question that contains all necessary context, so it can be understood without the history.
+
+Conversation history:
+    {history}
+
+    Follow-up question: {question}
+
+    If the follow-up question is already standalone (doesn't reference prior context), return it unchanged.
+    Provide only the standalone question, without any preamble or explanation."""

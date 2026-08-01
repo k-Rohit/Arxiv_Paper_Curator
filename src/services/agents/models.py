@@ -8,7 +8,7 @@ Mental model:
     LLM call  ──>  returns JSON in one of these shapes  ──>  graph routes / stores / displays
 """
 
-from typing import Any, Dict, Literal
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -160,3 +160,10 @@ class QueryRewriteOutput(BaseModel):
     
 class CondensedQuery(BaseModel):
     standalone_query: str = Field(description="The follow-up rewritten as a standalone question")
+    
+class ToolSelection(BaseModel):
+    tool: Literal["retrieve", "summarize_paper", "compare_papers", "list_by_topic"]
+    arxiv_id: Optional[str] = None
+    paper_references: list[str] = Field(default_factory=list)
+    topic: Optional[str] = None
+    reason: str = ""

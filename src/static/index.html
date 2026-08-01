@@ -233,7 +233,17 @@ let mode = "ask";
 let busy = false;
 // One thread per page load — all turns of this chat group into a single
 // LangSmith Thread (grouped by session_id metadata). Refresh = new thread.
-const THREAD_ID = crypto.randomUUID();
+// crypto.randomUUID() needs a secure context and newer browsers — fall back
+// to a manual UUID v4 so this never crashes the whole script.
+function makeThreadId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+const THREAD_ID = makeThreadId();
 
 const $ = (id) => document.getElementById(id);
 const thread = $("thread"), input = $("input"), send = $("send"), main = $("main");
@@ -246,13 +256,15 @@ $("seg").addEventListener("click", (e) => {
   $("knobs").style.opacity = mode === "ask" ? 1 : .35;
 });
 
-/* ── health check ── */
+/* ── health check (5s timeout — never hang on "checking…") ── */
 (async () => {
   try {
-    const r = await fetch(`${API}/health`);
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) });
     $("dot").classList.toggle("ok", r.ok);
     $("statusText").textContent = r.ok ? "API connected" : `API error ${r.status}`;
-  } catch { $("statusText").textContent = "API offline"; }
+  } catch (e) {
+    $("statusText").textContent = e.name === "TimeoutError" ? "API timeout" : "API offline";
+  }
 })();
 
 /* ── minimal markdown → HTML (bold, italic, code, links, lists) ── */

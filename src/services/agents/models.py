@@ -159,4 +159,4 @@ class QueryRewriteOutput(BaseModel):
     )
     
 class CondensedQuery(BaseModel):
-    condensed_query: str = Field(description="The follow-up rewritten as a standalone question")
+    standalone_query: str = Field(description="The follow-up rewritten as a standalone question")

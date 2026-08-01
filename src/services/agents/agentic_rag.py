@@ -19,6 +19,7 @@ from .nodes import (
     rewrite_query,
     route,
     score_user_query,
+    ainvoke_condense_followup
 )
 from .state import AgentState
 from .tools import create_retriever_tool
@@ -76,8 +77,8 @@ class AgenticRag:
         )
         tools = [retriever_tool]
 
-        # ─── Nodes ───────────────────────────────────────────────
         logger.info("Adding nodes to workflow graph")
+        workflow.add_node("condense_followup_node", ainvoke_condense_followup)
         workflow.add_node("guardrail_node",       score_user_query)
         workflow.add_node("retrieve_node",        initiate_retrieve)
         workflow.add_node("out_of_scope_node",    ainvoke_out_of_scope_step)
@@ -86,11 +87,11 @@ class AgenticRag:
         workflow.add_node("rewrite_query_node",   rewrite_query)
         workflow.add_node("generate_answer_node", ainvoke_generate_answer)
 
-        # ─── Edges ───────────────────────────────────────────────
         logger.info("Configuring graph edges and routing logic")
 
-        # START → guardrail
-        workflow.add_edge(START, "guardrail_node")
+        # START → condense_followup if there are multiple human messages, otherwise skip to guardrail
+        workflow.add_edge(START, "condense_followup_node")
+        workflow.add_edge("condense_followup_node", "guardrail_node")
 
         # guardrail → retrieve OR out_of_scope
         workflow.add_conditional_edges(

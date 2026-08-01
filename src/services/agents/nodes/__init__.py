@@ -4,6 +4,7 @@ from .guardrail_node import score_user_query, route
 from .out_of_scope_node import ainvoke_out_of_scope_step
 from .retrieve_node import initiate_retrieve
 from .rewrite_query_node import rewrite_query
+from .condense_followup_node import ainvoke_condense_followup
 
 __all__ = [
     "ainvoke_generate_answer",
@@ -13,4 +14,5 @@ __all__ = [
     "ainvoke_out_of_scope_step",
     "initiate_retrieve",
     "rewrite_query",
+    "ainvoke_condense_followup",
 ]

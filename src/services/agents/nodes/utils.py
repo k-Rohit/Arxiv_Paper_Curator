@@ -21,7 +21,7 @@ def get_latest_query(messages: List):
     raise ValueError("No user query found in messages")
 
 def get_latest_context(messages: List):
-    """ 
+    """
     Get the latest context message (mainly for ToolMessage)
     :param messages: List of messages
     :returns: Latest context which it contains
@@ -30,3 +30,18 @@ def get_latest_context(messages: List):
         if isinstance(msg, ToolMessage):
             return msg.content if hasattr(msg,"content") else ""
     return ""
+
+def get_latest_tool_artifact(messages: List) -> list:
+    """Get the structured Document list attached to the latest ToolMessage.
+
+    The retriever tool returns (content, documents) via response_format=
+    "content_and_artifact" — `documents` lands on ToolMessage.artifact,
+    unflattened, so callers don't have to re-parse it out of the text content.
+
+    :param messages: List of messages
+    :returns: List of langchain_core.documents.Document, or [] if none found
+    """
+    for msg in reversed(messages):
+        if isinstance(msg, ToolMessage) and getattr(msg, "artifact", None):
+            return msg.artifact
+    return []

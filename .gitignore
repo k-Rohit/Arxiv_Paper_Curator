@@ -225,3 +225,7 @@ AGENTS_GUIDE.md
 
 # Downloaded arxiv PDFs (large binaries, regenerable via ingestion pipeline)
 arxiv_pdfs/
+
+# Local-only docs (not committed) — README.md and CLAUDE.md stay at root and
+# tracked; everything else lives here.
+docs/

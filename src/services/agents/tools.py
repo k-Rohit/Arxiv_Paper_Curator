@@ -23,9 +23,9 @@ def create_retriever_tool(
     :returns: LangChain tool for retrieving papers
     """
     
-    @tool
-    async def retrieve_papers(query: str) -> list[Document]:
-        
+    @tool(response_format="content_and_artifact")
+    async def retrieve_papers(query: str) -> tuple[str, list[Document]]:
+
         """Search and return relevant arXiv research papers.
 
         Use this tool when the user asks about:
@@ -78,8 +78,20 @@ def create_retriever_tool(
             documents.append(doc)
         logger.debug(f"Converted {len(documents)} hits to Langchain Documents.")
         logger.info(f"✓ Retrieved {len(documents)} papers successfully")
-        
-        return documents
+
+        # content = what the grading/generation LLMs read. Previously the tool
+        # returned raw `documents` and LangChain stringified the whole list via
+        # str(), which happened to dump metadata (arxiv_id, title) as text too
+        # (that's how citations like "arXiv:2607.28623v1" ended up in answers).
+        # Keep that same citation info here explicitly, instead of relying on
+        # an incidental repr.
+        # documents = kept as the ToolMessage artifact so downstream nodes can
+        # access structured metadata directly instead of re-parsing text.
+        content = "\n\n".join(
+            f"[{doc.metadata.get('title', '')} (arXiv:{doc.metadata.get('arxiv_id', '')})]\n{doc.page_content}"
+            for doc in documents
+        )
+        return content, documents
     return retrieve_papers
         
         

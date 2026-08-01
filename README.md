@@ -172,7 +172,7 @@ This repo isn't a clone — a few intentional changes:
 | Airflow DAG layout | Single `tasks.py` | Split per concern: `common.py`, `fetching.py`, `setup.py`, `reporting.py`, `indexing.py` |
 | Settings split | Mostly inline | Per-domain `*Settings` classes (`OpenAIEmbeddingsSettings`, `OpenAIClientSettings`, `RedisSettings`) as typed sub-configs under `Settings` |
 | Per-folder READMEs | None | Every `src/` subfolder has a README explaining files + connections |
-| Project map | None | [`PROJECT_MAP.md`](PROJECT_MAP.md) at the root |
+| Project map | None | [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md) (local-only, gitignored) |
 
 The course is the authoritative reference for the curriculum. This repo's refactors are personal preferences for navigation and modularity.
 

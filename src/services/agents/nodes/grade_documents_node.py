@@ -7,10 +7,10 @@ from langchain_openai import ChatOpenAI
 from langgraph.runtime import Runtime
 
 from ..context import Context
-from ..models  import GradeDocuments, GradingResult
+from ..models  import GradeDocuments, GradingResult, SourceItem
 from ..prompts import GRADE_DOCUMENTS_PROMPT
 from ..state   import AgentState
-from .utils    import get_latest_context, get_latest_query
+from .utils    import get_latest_context, get_latest_query, get_latest_tool_artifact
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -45,7 +45,22 @@ async def ainvoke_grade_retrieved_chunks(
     )
     logger.info(f"grade={results.binary_score} route={route} took={time.time()-start_time:.2f}s")
 
+    relevant_sources: list[SourceItem] = []
+    if is_relevant:
+        for doc in get_latest_tool_artifact(state["messages"]):
+            authors = doc.metadata.get("authors", "")
+            relevant_sources.append(
+                SourceItem(
+                    arxiv_id=doc.metadata.get("arxiv_id", ""),
+                    title=doc.metadata.get("title", ""),
+                    authors=authors.split(", ") if authors else [],
+                    url=doc.metadata.get("source", ""),
+                    relevance_score=doc.metadata.get("score", 0.0),
+                )
+            )
+
     return {
         "routing_decision": route,
         "grading_results":  [grading_result],
+        "relevant_sources": relevant_sources,
     }

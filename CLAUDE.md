@@ -21,8 +21,8 @@ Good: "DI = pass the thing in instead of building it inside. Example: `Search(op
 
 Before doing anything substantial, read these two files — they're the canonical map of the codebase:
 
-1. [PROJECT_MAP.md](PROJECT_MAP.md) — layered architecture, full dependency graph, per-file import/imported-by reference, gotchas.
-2. The per-folder README inside whichever area you're touching (`src/db/README.md`, `src/repositories/README.md`, `src/schemas/README.md`, `src/services/README.md` and each sub-service's README, etc.).
+1. [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md) — layered architecture, full dependency graph, per-file import/imported-by reference, gotchas.
+2. The per-folder README for whichever area you're touching, now consolidated under `docs/` (gitignored, local-only): `docs/db-README.md`, `docs/repositories-README.md`, `docs/schemas-README.md`, `docs/services-README.md`, and each sub-service's README (`docs/services-arxiv-README.md`, `docs/services-embeddings-README.md`, `docs/services-opensearch-README.md`, `docs/services-pdf_parser-README.md`), etc.
 
 The READMEs explain how each folder's files connect to each other and to the outside. Don't re-derive that from scratch — read them.
 

@@ -141,6 +141,108 @@ class MetadataFetcher:
             results["errors"].append(f"Pipeline error: {str(e)}")
             raise PipelineException(f"Pipeline execution failed: {e}") from e
 
+    async def fetch_and_process_by_topic(
+        self,
+        search_query: str,
+        max_results: int = 5,
+        process_pdfs: bool = True,
+        store_to_db: bool = True,
+        db_session: Optional[Session] = None,
+    ) -> Dict[str, Any]:
+        """
+        Fetch papers from arXiv by topic (not date range), process PDFs, and store to database.
+
+        Same pipeline as fetch_and_process_papers, with two differences: it searches by
+        an arXiv query string instead of a date window, and it drops papers already in
+        the corpus BEFORE downloading/parsing them (that work costs ~10-30s per paper).
+
+        :param search_query: arXiv API query syntax, e.g. "all:BERT AND cat:cs.CL"
+        :param max_results: Maximum papers to fetch
+        :param process_pdfs: Whether to download and parse PDFs
+        :param store_to_db: Whether to store results in database
+        :param db_session: Database session (required if store_to_db=True)
+        :returns: Dictionary with processing results, statistics, and new_arxiv_ids
+        """
+        results = {
+            "papers_fetched": 0,
+            "papers_skipped_existing": 0,
+            "pdfs_downloaded": 0,
+            "pdfs_parsed": 0,
+            "papers_stored": 0,
+            "new_arxiv_ids": [],
+            "errors": [],
+            "processing_time": 0,
+        }
+
+        start_time = datetime.now()
+
+        try:
+            # Step 1: fetch metadata from arXiv by topic
+            papers = await self.arxiv_client.fetch_papers_with_query(
+                search_query=search_query,
+                max_results=max_results,
+                sort_by="submittedDate",
+                sort_order="descending",
+            )
+
+            results["papers_fetched"] = len(papers)
+            if not papers:
+                logger.warning(f"No papers found for query: {search_query}")
+                return results
+
+            # Step 1.5: drop papers already in the corpus, before any expensive work.
+            # upsert() alone would avoid duplicate rows but NOT the download/parse cost.
+            if store_to_db and db_session:
+                paper_repo = PaperRepository(db_session)
+                new_papers = [p for p in papers if not paper_repo.get_by_arxiv_id(p.arxiv_id)]
+                results["papers_skipped_existing"] = len(papers) - len(new_papers)
+                papers = new_papers
+
+                if not papers:
+                    results["processing_time"] = (datetime.now() - start_time).total_seconds()
+                    logger.info(
+                        f"All {results['papers_skipped_existing']} fetched papers already in corpus — nothing to do"
+                    )
+                    return results
+
+            pdf_results = {}
+            if process_pdfs:
+                pdf_results = await self._process_pdfs_batch(papers)
+                results["pdfs_downloaded"] = pdf_results["downloaded"]
+                results["pdfs_parsed"] = pdf_results["parsed"]
+                results["errors"].extend(pdf_results["errors"])
+
+            if store_to_db and db_session:
+                logger.info("Storing papers to database...")
+                stored_count = self._store_papers_to_db(
+                    papers,
+                    pdf_results.get("parsed_papers", {}),
+                    db_session,
+                )
+                results["papers_stored"] = stored_count
+                results["new_arxiv_ids"] = [p.arxiv_id for p in papers]
+            elif store_to_db:
+                logger.warning("Database storage requested but no session provided")
+                results["errors"].append("Database session not provided for storage")
+
+            results["processing_time"] = (datetime.now() - start_time).total_seconds()
+
+            logger.info(
+                f"Topic pipeline completed in {results['processing_time']:.1f}s: "
+                f"query={search_query!r}, "
+                f"{results['papers_fetched']} fetched, "
+                f"{results['papers_skipped_existing']} already known, "
+                f"{results['papers_stored']} stored, "
+                f"{len(results['errors'])} errors"
+            )
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Topic pipeline error: {e}")
+            results["errors"].append(f"Topic pipeline error: {str(e)}")
+            raise PipelineException(f"Topic pipeline execution failed: {e}") from e
+
     async def _process_pdfs_batch(self, papers: List[ArxivPaper]) -> Dict[str, Any]:
         """
         Process PDFs for a batch of papers with async concurrency.
@@ -240,8 +342,9 @@ class MetadataFetcher:
                 [f"PDF parse failed: {arxiv_id}" for arxiv_id in results["parse_failures"]]
             )
 
-        return results
-
+        return results     
+    
+      
     async def _download_and_parse_pipeline(
         self,
         paper: ArxivPaper,

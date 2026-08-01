@@ -1,4 +1,4 @@
-.PHONY: help start stop restart status logs health setup format lint test test-cov clean
+.PHONY: help start stop restart status logs health setup format lint test test-cov clean dev dev-stop api
 
 start:
 	docker compose up --build -d
@@ -14,3 +14,15 @@ logs:
 
 health:
 	curl http://localhost:8000/api/v1/health
+
+# Dev mode: only the infra the API needs (Postgres + OpenSearch + Redis),
+# run the API itself with `make api` in a separate terminal — fast reload,
+# no Docker rebuild per code change.
+dev:
+	docker compose up -d postgres opensearch redis
+
+dev-stop:
+	docker compose stop postgres opensearch redis
+
+api:
+	uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000

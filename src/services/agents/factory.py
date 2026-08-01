@@ -11,7 +11,7 @@ from .config import GraphConfig
 
 
 @lru_cache(maxsize=1)
-def make_agentic_rag() -> AgenticRag:
+def make_agentic_rag(checkpointer=None) -> AgenticRag:
     """Build and return the singleton AgenticRag service.
 
     Wires all client dependencies (OpenSearch, embeddings, LLM) via their own
@@ -22,4 +22,5 @@ def make_agentic_rag() -> AgenticRag:
         openaiembeddings=make_openai_embeddings_client(),
         openai_=make_openai_client(),
         graph_config=GraphConfig(),
+        checkpointer=checkpointer
     )

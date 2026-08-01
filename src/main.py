@@ -13,6 +13,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
 from src.config import get_settings
 from src.db.factory import make_database
 from src.middlewares import RequestLoggingMiddleware
@@ -66,13 +68,18 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Cache disabled — Redis unavailable: {e}")
 
     # Agentic RAG (compiles the LangGraph once at startup)
-    app.state.agentic_rag = make_agentic_rag()
-    logger.info("Agentic RAG service ready")
+    # AsyncPostgresSaver.from_conn_string is an async context manager — everything
+    # that depends on it (agentic_rag + the yield) must be nested inside this block,
+    # since the connection needs to stay open for the app's whole lifetime.
+    async with AsyncPostgresSaver.from_conn_string(app.state.settings.checkpoint_database_url) as checkpointer:
+        await checkpointer.setup()
+        app.state.agentic_rag = make_agentic_rag(checkpointer=checkpointer)
+        logger.info("Agentic RAG service ready")
 
-    logger.info("All services initialized: arxiv, pdf_parser, embeddings, llm, cache, agentic_rag")
+        logger.info("All services initialized: arxiv, pdf_parser, embeddings, llm, cache, agentic_rag")
 
-    logger.info("API ready")
-    yield
+        logger.info("API ready")
+        yield
 
     # Shutdown
     app.state.database.teardown()

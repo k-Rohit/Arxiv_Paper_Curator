@@ -38,6 +38,7 @@ class AgenticRag:
         openaiembeddings: OpenAIEmbeddingsClient,
         openai_: OpenAIClient,
         graph_config: GraphConfig,
+        checkpointer=None
     ):
         """Initialize agentic RAG service.
 
@@ -50,7 +51,7 @@ class AgenticRag:
         self.openaiembeddings = openaiembeddings
         self.openai_          = openai_
         self.graph_config     = graph_config
-
+        self.checkpointer     = checkpointer
         logger.info("Initializing AgenticRAGService with configuration:")
         logger.info(f"  Model:                  {self.graph_config.model}")
         logger.info(f"  Top-k:                  {self.graph_config.top_k}")
@@ -61,9 +62,9 @@ class AgenticRag:
         self.graph = self._build_graph()
         logger.info("✓ AgenticRAGService initialized successfully")
 
-    def _build_graph(self) -> StateGraph:
+    def _build_graph(self, checkpointer=None) -> StateGraph:
         """Build and compile the LangGraph workflow."""
-        logger.info("Building LangGraph workflow with context_schema=Context")
+        logger.info(f"Building LangGraph workflow with context_schema, {Context}")
         workflow = StateGraph(AgentState, context_schema=Context)
 
         # Tool the LLM calls to retrieve chunks
@@ -134,7 +135,7 @@ class AgenticRag:
         workflow.add_edge("generate_answer_node", END)
 
         logger.info("Compiling LangGraph workflow")
-        compiled_graph = workflow.compile()
+        compiled_graph = workflow.compile(checkpointer=self.checkpointer)
         logger.info("✓ Graph compilation successful")
 
         return compiled_graph

@@ -36,6 +36,7 @@ dependencies = [
     "openai>=1.40.0",
     "langsmith>=0.8.4",
     "langchain-openai>=1.2.2",
+    "langgraph-checkpoint-postgres>=3.1.1",
 ]
 readme = "README.md"
 

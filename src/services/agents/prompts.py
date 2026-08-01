@@ -95,8 +95,16 @@ Evaluate whether this query is:
 - Requires academic paper knowledge to answer
 - Within the domain of Computer Science research
 
+Important: arXiv papers routinely use short, invented, or pop-culture-sounding
+names as titles/acronyms (e.g. "PAC-MAN", "ALOHA", "DreamerV3", "CLIP", "Mario").
+If an unfamiliar or game/brand-like proper noun appears ALONGSIDE clearly
+technical qualifiers (e.g. "safety mechanism", "for humanoid robots", "CBF-RL",
+"reinforcement learning", "architecture", "model"), treat it as a likely paper
+name, not the unrelated pop-culture thing it resembles. Do not penalize the
+score just because a term looks like a game, movie, or brand.
+
 Assign a relevance score (0-100):
-- 80-100: Clearly about CS/AI/ML research (e.g., "What are transformer architectures?", "How does BERT work?")
+- 80-100: Clearly about CS/AI/ML research (e.g., "What are transformer architectures?", "How does BERT work?", "What safety mechanism does PAC-MAN use for humanoid robots?")
 - 60-79: Potentially research-related but unclear (e.g., "Tell me about attention mechanisms")
 - 40-59: Borderline or ambiguous (e.g., "What is machine learning?")
 - 0-39: NOT about research papers (e.g., "What is a dog?", "Hello", "What is 2+2?")

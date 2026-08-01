@@ -62,7 +62,7 @@ class AgenticRag:
         self.graph = self._build_graph()
         logger.info("✓ AgenticRAGService initialized successfully")
 
-    def _build_graph(self, checkpointer=None) -> StateGraph:
+    def _build_graph(self) -> StateGraph:
         """Build and compile the LangGraph workflow."""
         logger.info(f"Building LangGraph workflow with context_schema, {Context}")
         workflow = StateGraph(AgentState, context_schema=Context)
@@ -140,15 +140,34 @@ class AgenticRag:
 
         return compiled_graph
 
-    async def ask(self, query: str, user_id: str = "api_user") -> dict:
+    async def ask(
+        self,
+        query: str,
+        user_id: str = "api_user",
+        thread_id: str | None = None,
+    ) -> dict:
         """Run the agentic graph end-to-end for one user query.
 
-        :param query:   The user's question
-        :param user_id: Optional user identifier (for tracing / logs)
-        :returns:       Dict with query, answer, sources, retrieval_attempts
+        :param query:     The user's question
+        :param user_id:   Optional user identifier (for tracing / logs)
+        :param thread_id: Conversation id — same id across calls lets the
+                           checkpointer restore prior turns. The frontend
+                           generates and sends one on every request; a missing
+                           thread_id here means a caller integration forgot to
+                           wire it through, so this raises rather than masking
+                           it with a throwaway random id.
+        :returns:         Dict with query, answer, sources, retrieval_attempts
+        :raises ValueError: if query is empty, or thread_id is missing
         """
         if not query or not query.strip():
             raise ValueError("Query cannot be empty")
+        if not thread_id:
+            raise ValueError(
+                "thread_id is required — the graph is checkpointed and needs a "
+                "conversation id to load/save state. The frontend already sends "
+                "one on every request; a missing thread_id means the caller "
+                "isn't passing it through."
+            )
 
         # Initial state — every AgentState field explicitly set
         state_input: AgentState = {
@@ -173,8 +192,9 @@ class AgenticRag:
             graph_config=self.graph_config,
         )
 
-        logger.info(f"Invoking graph for user_id={user_id} query={query[:80]!r}")
-        result = await self.graph.ainvoke(state_input, context=runtime_context)
+        logger.info(f"Invoking graph for user_id={user_id} thread_id={thread_id} query={query[:80]!r}")
+        config = {"configurable": {"thread_id": thread_id}}
+        result = await self.graph.ainvoke(state_input, context=runtime_context, config=config)
 
         return {
             "query":              query,

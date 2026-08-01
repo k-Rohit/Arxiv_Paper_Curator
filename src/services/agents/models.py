@@ -130,24 +130,6 @@ class GradingResult(BaseModel):
     reasoning: str = Field(default="", description="Grading reasoning")
 
 
-class ReasoningStep(BaseModel):
-    """One line in the agent's "what I just did" LOG.
-
-    Each node appends a ReasoningStep to the state. Powers the
-    transparency feature — users (or Langfuse) can replay the agent's
-    full chain of decisions for debugging and trust.
-
-    Example trace:
-        [ReasoningStep(step_name="guardrail", description="passed (score 92)"),
-         ReasoningStep(step_name="retrieve",  description="got 5 chunks via hybrid"),
-         ReasoningStep(step_name="grade",     description="3/5 relevant, 2 dropped"),
-         ReasoningStep(step_name="generate",  description="answered using 3 chunks")]
-    """
-
-    step_name: str = Field(description="Name of the reasoning step")
-    description: str = Field(description="Human-readable description")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Step metadata")
-
 class QueryRewriteOutput(BaseModel):
     """Structured output for query rewriting."""
 

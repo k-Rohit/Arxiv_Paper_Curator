@@ -3,8 +3,6 @@ from typing import Dict, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from ..models import ReasoningStep, SourceItem, ToolArtefact
-
 logger = logging.getLogger(__name__)
 
 def get_latest_query(messages: List):

@@ -52,7 +52,7 @@ async def agentic_ask(
         run_tree.add_metadata({"session_id": request.thread_id})
 
     try:
-        result = await agent.ask(query=request.query)
+        result = await agent.ask(query=request.query, thread_id=request.thread_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

@@ -1,11 +1,8 @@
 import logging
-from collections.abc import Callable
-from contextlib import AbstractContextManager
 from typing import Any
 
 from langchain_core.documents import Document
 from langchain_core.tools import tool
-from sqlalchemy.orm import Session
 
 from src.repositories.paper import PaperRepository
 from src.services.embeddings.openai_client import OpenAIEmbeddingsClient
@@ -105,7 +102,7 @@ def create_retriever_tool(
 def create_live_fetch_tool(
     metadata_fetcher: MetadataFetcher,
     hybrid_indexing_service: HybridIndexingService,
-    db_session_factory: Callable[[], AbstractContextManager[Session]],
+    db_session_factory,
     default_max_results: int = 5,
 ):
     """Create a tool that fetches NEW papers from arXiv on demand and indexes them.

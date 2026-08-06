@@ -5,6 +5,9 @@ from .out_of_scope_node import ainvoke_out_of_scope_step
 from .retrieve_node import initiate_retrieve
 from .rewrite_query_node import rewrite_query
 from .condense_followup_node import ainvoke_condense_followup
+from .router_node import select_tool, route_after_tool_selection
+from .translate_query_node import translate_query_for_arxiv
+from .live_fetch_node import initiate_live_fetch, finalize_live_fetch
 
 __all__ = [
     "ainvoke_generate_answer",
@@ -15,4 +18,10 @@ __all__ = [
     "initiate_retrieve",
     "rewrite_query",
     "ainvoke_condense_followup",
+    # Phase 2 — tool routing + live fetch
+    "select_tool",
+    "route_after_tool_selection",
+    "translate_query_for_arxiv",
+    "initiate_live_fetch",
+    "finalize_live_fetch",
 ]

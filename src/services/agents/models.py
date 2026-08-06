@@ -144,10 +144,16 @@ class CondensedQuery(BaseModel):
     standalone_query: str = Field(description="The follow-up rewritten as a standalone question")
     
 class ToolSelection(BaseModel):
-    tool: Literal["retrieve", "summarize_paper", "fetch_live_papers"]
-    paper_references: list[str] = Field(default_factory=list)
-    topic: Optional[str] = None
-    reason: str = ""
+    """Which tool should handle this query, chosen by the routing node's LLM.
+
+    Example:
+        "how does attention work?"        -> tool="retrieve"
+        "find new papers on diffusion"    -> tool="fetch_live_papers", topic="diffusion"
+    """
+
+    tool: Literal["retrieve", "fetch_live_papers"]
+    topic: Optional[str] = Field(default=None, description="Subject matter, set only for fetch_live_papers")
+    reason: str = Field(default="", description="Brief reason for the choice")
 
 class ArxivQueryTranslation(BaseModel):
     """ Structured output for translating a user query into an arXiv search query.

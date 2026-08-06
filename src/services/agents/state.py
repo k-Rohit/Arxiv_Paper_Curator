@@ -55,6 +55,30 @@ class AgentState(TypedDict):
     :cvar metadata:
         Runtime metadata for tracing and analytics.
     :type metadata: Dict[str, Any]
+    
+    :cvar tool_selection:
+        The selected tool for the next action (e.g., "retrieve" or "fetch_live_papers").
+    :type tool_selection: Optional[str] 
+    
+    :cvar target_topic:
+        The target topic for live fetching, if applicable.
+    :type target_topic: Optional[str]
+    
+    :cvar arxiv_search_query:
+        The search query for Arxiv, if applicable.
+    :type arxiv_search_query: Optional[str]
+    
+    :cvar live_fetch_topic_label:
+        Human-readable label for the live fetch topic.
+    :type live_fetch_topic_label: Optional[str]
+    
+    :cvar live_fetch_attempted:
+        Flag indicating if a live fetch has been attempted.
+    :type live_fetch_attempted: bool
+    
+    :cvar live_fetch_log:
+        Log of progress lines for live fetch reasoning steps.
+    :type live_fetch_log: List[str]
 
     """
     
@@ -69,3 +93,12 @@ class AgentState(TypedDict):
     relevant_tool_artefacts: Optional[list[ToolArtefact]]
     grading_results: list[GradingResult]
     metadata: Dict[str, Any]
+    
+    # ─── Phase 2: tool routing + live fetch ───
+    tool_selection: Optional[str]           # "retrieve" | "fetch_live_papers"  (router writes)
+    target_topic: Optional[str]             # subject to fetch                  (router writes)
+    arxiv_search_query: Optional[str]       # "all:BERT AND cat:cs.CL"          (translate writes)
+    live_fetch_topic_label: Optional[str]   # human label for logs              (translate writes)
+    live_fetch_attempted: bool              # guard: fetch at most once per run
+    live_fetch_log: list[str]               # progress lines -> reasoning_steps
+

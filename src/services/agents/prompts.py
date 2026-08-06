@@ -163,3 +163,24 @@ Syntax:
         "humanoid locomotion"   -> all:humanoid locomotion AND cat:cs.RO
 
         Topic: {topic}"""
+
+
+# ─── Tool selection / routing prompt (used in router_node) ─────────────
+TOOL_ROUTING_PROMPT = """You route requests for an arXiv research assistant. Pick the ONE tool that best handles the user's request.
+
+Tools:
+- retrieve: answer a question using research papers we already have locally. This is the DEFAULT for ordinary questions about concepts, methods, or findings.
+- fetch_live_papers: go find NEW papers from arXiv that we may not have yet. Signals: "find", "get me", "search for", "any recent/latest papers on...".
+
+Rules:
+- When in doubt, choose retrieve. It is the safe default.
+- A question ABOUT a topic is retrieve. A request to GO GET papers on a topic is fetch_live_papers.
+- For fetch_live_papers, put the subject matter into topic. Leave topic empty for retrieve.
+
+Examples:
+"how does attention work?" -> retrieve
+"what did the PAIChecker paper find?" -> retrieve
+"find new papers on diffusion models" -> fetch_live_papers, topic="diffusion models"
+"any latest papers on retrieval augmented generation?" -> fetch_live_papers, topic="retrieval augmented generation"
+
+User request: {question}"""

@@ -144,8 +144,7 @@ class CondensedQuery(BaseModel):
     standalone_query: str = Field(description="The follow-up rewritten as a standalone question")
     
 class ToolSelection(BaseModel):
-    tool: Literal["retrieve", "summarize_paper", "compare_papers", "list_by_topic"]
-    arxiv_id: Optional[str] = None
+    tool: Literal["retrieve", "summarize_paper", "fetch_live_papers"]
     paper_references: list[str] = Field(default_factory=list)
     topic: Optional[str] = None
     reason: str = ""

@@ -15,6 +15,8 @@ class GraphConfig(BaseModel):
     :param top_k: Number of documents to retrieve from search
     :param use_hybrid: Whether to use hybrid search (BM25 + vector)
     :param enable_tracing: Whether to enable Langfuse tracing
+    :param enable_live_fetch: Whether the agent may fetch new papers from arXiv on demand
+    :param live_fetch_max_results: Max papers to pull per live fetch (each costs a PDF download + parse)
     :param metadata: Additional runtime metadata for tracking and analytics
     :param settings: Application settings instance for environment and service config
     """
@@ -25,6 +27,8 @@ class GraphConfig(BaseModel):
     temperature: float = 0.0
     top_k: int = 3
     use_hybrid: bool = True
+    enable_live_fetch: bool = True
+    live_fetch_max_results: int = 3
     metadata: Dict[str, Any] = {}
     settings: Settings = Field(default_factory=get_settings)
 

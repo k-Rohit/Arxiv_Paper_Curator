@@ -148,3 +148,14 @@ class ToolSelection(BaseModel):
     paper_references: list[str] = Field(default_factory=list)
     topic: Optional[str] = None
     reason: str = ""
+
+class ArxivQueryTranslation(BaseModel):
+    """ Structured output for translating a user query into an arXiv search query.
+
+    The LLM translates the user's natural language query into a structured
+    search query that can be used to fetch relevant papers from arXiv.
+    """
+    arxiv_search_query: str = Field(description="arXiv API query, e.g. 'all:diffusion AND cat:cs.CV'")
+    topic_label: str = Field(description="Short human-readable topic name")
+    
+

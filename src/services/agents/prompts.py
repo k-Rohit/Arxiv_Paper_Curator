@@ -145,3 +145,21 @@ Conversation history:
 
     If the follow-up question is already standalone (doesn't reference prior context), return it unchanged.
     Provide only the standalone question, without any preamble or explanation."""
+    
+    
+ARXIV_QUERY_TRANSLATION_PROMPT = """Convert the user's topic into an arXiv API search query.
+
+Syntax:
+    all:<terms>    search everywhere      ti:<terms>   title only
+    abs:<terms>    abstract only          cat:<code>   category (cs.AI, cs.LG, cs.CL, cs.CV, cs.RO)
+    Combine with AND / OR.
+
+    Add a cat: filter only when the field is obvious from the topic. Keep terms broad —
+    over-narrow queries return nothing.
+
+    Examples:
+        "diffusion models"      -> all:diffusion models AND cat:cs.CV
+        "the BERT paper"        -> all:BERT language model AND cat:cs.CL
+        "humanoid locomotion"   -> all:humanoid locomotion AND cat:cs.RO
+
+        Topic: {topic}"""

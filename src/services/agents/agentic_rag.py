@@ -6,6 +6,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from src.services.embeddings.openai_client import OpenAIEmbeddingsClient
 from src.services.openai_ import OpenAIClient
 from src.services.opensearch.client import OpenSearchClient
+from src.services.metadata_fetcher import MetadataFetcher
+from src.services.indexing.hybrid_indexer import HybridIndexingService
 
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -22,7 +24,7 @@ from .nodes import (
     ainvoke_condense_followup
 )
 from .state import AgentState
-from .tools import create_retriever_tool
+from .tools import create_retriever_tool, create_live_fetch_tool
 
 logger = logging.getLogger(__name__)
 
@@ -39,20 +41,30 @@ class AgenticRag:
         openaiembeddings: OpenAIEmbeddingsClient,
         openai_: OpenAIClient,
         graph_config: GraphConfig,
-        checkpointer=None
+        checkpointer=None,
+        metadata_fetcher: MetadataFetcher | None = None,
+        hybrid_indexing_service: HybridIndexingService | None = None,
+        db_session_factory=None,
     ):
         """Initialize agentic RAG service.
 
-        :param opensearch:       Client for document search
-        :param openaiembeddings: Client for embeddings
-        :param openai_:          OpenAI client for generation
-        :param graph_config:     Configuration for graph execution
+        :param opensearch:              Client for document search
+        :param openaiembeddings:        Client for embeddings
+        :param openai_:                 OpenAI client for generation
+        :param graph_config:            Configuration for graph execution
+        :param checkpointer:            LangGraph checkpointer for conversational memory
+        :param metadata_fetcher:        Ingestion pipeline, used by the live-fetch tool
+        :param hybrid_indexing_service: Chunk/embed/index service, used by the live-fetch tool
+        :param db_session_factory:      Zero-arg callable returning a DB session context manager
         """
         self.opensearch       = opensearch
         self.openaiembeddings = openaiembeddings
         self.openai_          = openai_
         self.graph_config     = graph_config
         self.checkpointer     = checkpointer
+        self.metadata_fetcher = metadata_fetcher
+        self.hybrid_indexing_service = hybrid_indexing_service
+        self.db_session_factory      = db_session_factory
         logger.info("Initializing AgenticRAGService with configuration:")
         logger.info(f"  Model:                  {self.graph_config.model}")
         logger.info(f"  Top-k:                  {self.graph_config.top_k}")
@@ -75,7 +87,13 @@ class AgenticRag:
             top_k=self.graph_config.top_k,
             use_hybrid=self.graph_config.use_hybrid,
         )
-        tools = [retriever_tool]
+        live_fetch_tool = create_live_fetch_tool(
+            metadata_fetcher=self.metadata_fetcher,
+            hybrid_indexing_service=self.hybrid_indexing_service,
+            db_session_factory=self.db_session_factory,
+            default_max_results=self.graph_config.live_fetch_max_results,
+        )
+        tools = [retriever_tool, live_fetch_tool]
 
         logger.info("Adding nodes to workflow graph")
         workflow.add_node("condense_followup_node", ainvoke_condense_followup)

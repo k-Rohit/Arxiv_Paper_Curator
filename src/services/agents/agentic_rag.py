@@ -305,14 +305,22 @@ class AgenticRag:
         if retrieval_attempts > 0:
             steps.append(f"Retrieved documents ({retrieval_attempts} attempt(s))")
 
+        relevant_count = sum(1 for g in grading_results if g.is_relevant)
         if grading_results:
-            relevant_count = sum(1 for g in grading_results if g.is_relevant)
             steps.append(f"Graded documents ({relevant_count} relevant)")
 
         if result.get("rewritten_query"):
             steps.append("Rewritten query for better results")
 
-        steps.append("Generated answer from context")
+        # Name the step that actually ran. Appending "Generated answer from context"
+        # unconditionally claimed a generation even when the graph ended on the
+        # out-of-scope refusal or the retrieval-exhausted fallback.
+        if retrieval_attempts == 0 and not grading_results:
+            steps.append("Declined — outside the scope of the paper corpus")
+        elif grading_results and relevant_count == 0:
+            steps.append("No relevant papers found — returned a fallback message")
+        else:
+            steps.append("Generated answer from context")
 
         return steps
 

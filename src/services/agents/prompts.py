@@ -5,16 +5,28 @@ Variables in `{braces}` get filled in by the node via `.format(...)`.
 """
 
 # ─── Grade documents for relevance (used in grade_documents_node) ──────
-GRADE_DOCUMENTS_PROMPT = """You are a grader assessing relevance of retrieved documents to a user question.
+GRADE_DOCUMENTS_PROMPT = """You are a grader deciding whether retrieved documents are worth using to answer a user question.
 
 Retrieved Documents:
 {context}
 
 User Question: {question}
 
-If the documents contain keywords or semantic meaning related to the question, grade them as relevant.
-Give a binary score 'yes' or 'no' to indicate whether the documents are relevant to the question.
-Also provide brief reasoning for your decision.
+The bar is LOW. Answer 'yes' if the documents are on the same topic as the question and
+give the reader anything useful about it — partial, tangential, or single-aspect coverage
+all count. You are NOT judging whether they completely answer the question.
+
+Answer 'no' ONLY when the documents are about a genuinely different subject and a reader
+would learn nothing relevant from them.
+
+Two common mistakes to avoid:
+- The question asks for the "latest", "newest", or "best" paper. Chunks carry no recency
+  or ranking information, so judge them on TOPIC alone — if they cover the subject, that
+  is 'yes'.
+- The question is broad or conversational ("what do papers say about X?", "tell me about
+  X"). Documents about X are relevant even if they each cover only one narrow aspect of X.
+
+Give a binary score 'yes' or 'no', plus brief reasoning.
 
 Respond in JSON format with 'binary_score' (yes/no) and 'reasoning' fields."""
 

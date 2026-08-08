@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
@@ -104,8 +105,13 @@ app.include_router(agentic_ask.router,   prefix="/api/v1")
 app.include_router(feedback.router,      prefix="/api/v1")
 
 
-# Chat UI — a single self-contained HTML page served at the root
-_UI_PATH = os.path.join(os.path.dirname(__file__), "static", "index.html")
+# Chat UI. index.html is served at the root; its stylesheet and script are served
+# from /static. Without this mount, only a single self-contained HTML file could be
+# served — any second asset would 404.
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+_UI_PATH = os.path.join(_STATIC_DIR, "index.html")
+
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)

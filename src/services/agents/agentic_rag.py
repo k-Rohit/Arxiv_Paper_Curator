@@ -234,9 +234,6 @@ class AgenticRag:
             "relevant_sources":      [],
             "relevant_tool_artefacts": None,
             "metadata":              {"user_id": user_id},
-            # Phase 2 — reset every turn. Only `messages` accumulates across turns
-            # (it has the add_messages reducer); every other field is last-write-wins,
-            # so anything not reset here would leak in from the checkpointed prior turn.
             "tool_selection":         None,
             "target_topic":           None,
             "arxiv_search_query":     None,
@@ -335,7 +332,7 @@ class AgenticRag:
         if format not in drawers:
             raise ValueError(f"Unknown format {format!r}. Use one of: {list(drawers)}")
 
-        logger.info(f"Generating graph visualization: format={format}")
+        logger.info(f"Generating graph visualization:")
         try:
             output = drawers[format](self.graph.get_graph())
             if save_to:

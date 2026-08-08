@@ -14,14 +14,20 @@ from langchain_core.messages import HumanMessage, AIMessage
 from .config import GraphConfig
 from .context import Context
 from .nodes import (
+    select_tool,
     ainvoke_generate_answer,
     ainvoke_grade_retrieved_chunks,
     ainvoke_out_of_scope_step,
     initiate_retrieve,
+    initiate_live_fetch,
     rewrite_query,
     route,
     score_user_query,
-    ainvoke_condense_followup
+    ainvoke_condense_followup,
+    translate_query_for_arxiv,
+    route_after_tool_selection,
+    route_after_tool,
+    finalize_live_fetch
 )
 from .state import AgentState
 from .tools import create_retriever_tool, create_live_fetch_tool
@@ -104,25 +110,45 @@ class AgenticRag:
         workflow.add_node("grade_document_node",  ainvoke_grade_retrieved_chunks)
         workflow.add_node("rewrite_query_node",   rewrite_query)
         workflow.add_node("generate_answer_node", ainvoke_generate_answer)
+        workflow.add_node('translate_query_node', translate_query_for_arxiv)
+        workflow.add_node('tool_router_node', select_tool)
+        workflow.add_node('live_fetch_call_node',initiate_live_fetch)
+        workflow.add_node('live_fetch_preprocess_node',finalize_live_fetch)
 
         logger.info("Configuring graph edges and routing logic")
 
+        ## Adding edges
         # START → condense_followup if there are multiple human messages, otherwise skip to guardrail
         workflow.add_edge(START, "condense_followup_node")
         workflow.add_edge("condense_followup_node", "guardrail_node")
-
+        
         # guardrail → retrieve OR out_of_scope
         workflow.add_conditional_edges(
             "guardrail_node",
             route,
             {
-                "continue":     "retrieve_node",
+                "continue":     "tool_router_node",
                 "out_of_scope": "out_of_scope_node",
             },
         )
 
         # out_of_scope → END
         workflow.add_edge("out_of_scope_node", END)
+        
+        workflow.add_conditional_edges('tool_router_node',
+                                       route_after_tool_selection,
+                                    {
+                                    "retrieve_node" : "retrieve_node",
+                                    "translate_query_node": "translate_query_node", 
+                                    })
+        # live fetch path: translate the topic → build the tool call → run it
+        workflow.add_edge("translate_query_node","live_fetch_call_node")
+        workflow.add_edge("live_fetch_call_node","tool_retrieve")
+        
+        # after the fetch → search the papers we just indexed, then answer from their
+        # actual content. Going straight to generate_answer_node would leave the LLM
+        # with only the fetch summary (titles + counts) and no paper text or sources.
+        workflow.add_edge("live_fetch_preprocess_node", "retrieve_node")
 
         # retrieve → tool_retrieve (via tool_calls) OR END (max attempts hit)
         workflow.add_conditional_edges(
@@ -134,8 +160,15 @@ class AgenticRag:
             },
         )
 
-        # tool_retrieve → grade
-        workflow.add_edge("tool_retrieve", "grade_document_node")
+        # tool_retrieve now runs 2 tools — send the result to the right handler
+        workflow.add_conditional_edges(
+            "tool_retrieve",
+            route_after_tool,
+            {
+                "grade_document_node":        "grade_document_node",
+                "live_fetch_preprocess_node": "live_fetch_preprocess_node",
+            },
+        )
 
         # grade → generate OR rewrite (based on state["routing_decision"])
         workflow.add_conditional_edges(
@@ -201,6 +234,15 @@ class AgenticRag:
             "relevant_sources":      [],
             "relevant_tool_artefacts": None,
             "metadata":              {"user_id": user_id},
+            # Phase 2 — reset every turn. Only `messages` accumulates across turns
+            # (it has the add_messages reducer); every other field is last-write-wins,
+            # so anything not reset here would leak in from the checkpointed prior turn.
+            "tool_selection":         None,
+            "target_topic":           None,
+            "arxiv_search_query":     None,
+            "live_fetch_topic_label": None,
+            "live_fetch_attempted":   False,
+            "live_fetch_log":         [],
         }
 
         # Runtime dependencies bundled for every node
@@ -258,6 +300,10 @@ class AgenticRag:
 
         if guardrail_result:
             steps.append(f"Validated query scope (score: {guardrail_result.score}/100)")
+
+        # Live-fetch progress, written by finalize_live_fetch. Listed before retrieval
+        # because the fetch happens first when it happens at all.
+        steps.extend(result.get("live_fetch_log", []))
 
         if retrieval_attempts > 0:
             steps.append(f"Retrieved documents ({retrieval_attempts} attempt(s))")

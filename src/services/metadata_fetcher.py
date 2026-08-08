@@ -177,11 +177,15 @@ class MetadataFetcher:
         start_time = datetime.now()
 
         try:
-            # Step 1: fetch metadata from arXiv by topic
+            # Step 1: fetch metadata from arXiv by topic.
+            # sort_by="relevance", NOT "submittedDate" (which the daily-ingestion path
+            # uses). A topic search wants the best matches; sorting by date returns the
+            # newest papers that loosely match the query, which in practice means
+            # unrelated papers that happen to share a keyword.
             papers = await self.arxiv_client.fetch_papers_with_query(
                 search_query=search_query,
                 max_results=max_results,
-                sort_by="submittedDate",
+                sort_by="relevance",
                 sort_order="descending",
             )
 

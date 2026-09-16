@@ -29,7 +29,7 @@ from src.services.pdf_parser.parser import PDFParserService
 from src.services.agents.agentic_rag import AgenticRag
 
 
-# ─── Settings ───────────────────────────────────────────────────────────
+# ─── Settings
 
 @lru_cache
 def get_settings() -> Settings:
@@ -42,7 +42,7 @@ def get_request_settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
-# ─── Database ───────────────────────────────────────────────────────────
+# ─── Database
 
 def get_database(request: Request) -> BaseDatabase:
     """Get the database instance from app state."""

@@ -33,8 +33,8 @@ The agentic graph (`/agentic_ask`) is checkpointed in Postgres per `thread_id`, 
 | Hybrid indexing service (chunker + embeddings + OpenSearch) | ✅ |
 | OpenAI LLM (chat-completion) client + RAG prompt builder | ✅ |
 | FastAPI app: lifespan, dependencies, middleware, OpenAPI | ✅ |
-| `/api/v1/ping` health-check endpoint | ✅ |
-| `/api/v1/hybrid_search` retrieval endpoint | ✅ |
+| `/api/v1/health` health-check endpoint (reports Postgres + OpenSearch status) | ✅ |
+| `/api/v1/hybrid-search/` retrieval endpoint | ✅ |
 | `/api/v1/ask` RAG Q&A endpoint (retrieve → LLM → answer) | ✅ |
 | Redis exact-match cache for `/ask` (with graceful degrade) | ✅ |
 | **Agentic RAG service** — LangGraph nodes (condense follow-up, guardrail, tool router, retrieve, grade, rewrite, translate query, live fetch, generate, out_of_scope), Context DI, compiled graph | ✅ |
@@ -44,7 +44,7 @@ The agentic graph (`/agentic_ask`) is checkpointed in Postgres per `thread_id`, 
 | **`/api/v1/agentic_ask` endpoint** (rich sources + reasoning steps in response, `thread_id`-scoped memory) | ✅ |
 | **Chat UI** — sidebar with per-browser conversation history (localStorage, keyed to `thread_id`), visual agent trace panel, citation cards | ✅ |
 | Per-service test notebooks (`notebooks/services/01-09`) | ✅ |
-| **3-stage eval harness** — retrieval (BM25/vector/hybrid × paper/chunk level), generation (faithfulness/relevance/correctness/abstention), 20-case golden set, LangSmith-tracked experiments with latency | ✅ |
+| Eval harness (RAG quality + LLM-as-judge) | ⏳ in progress |
 
 End-to-end pipeline verified via [`notebooks/end-to-end-pipeline.ipynb`](notebooks/end-to-end-pipeline.ipynb) — runs every stage against a real paper in ~1 minute.
 
@@ -65,7 +65,6 @@ End-to-end pipeline verified via [`notebooks/end-to-end-pipeline.ipynb`](noteboo
 | Agent framework | LangGraph (StateGraph + Context DI + ToolNode + conditional edges, 2 tools: retrieve + live-fetch) |
 | Conversational memory | `AsyncPostgresSaver` (LangGraph's native Postgres checkpointer), keyed by `thread_id` |
 | Agent tracing | LangSmith (auto-instruments every LangGraph node + LLM call via `LANGCHAIN_TRACING_V2=true`) |
-| Eval harness | Hand-rolled retrieval + generation metrics (`.with_structured_output()` LLM judges), tracked as named experiments via `langsmith.aevaluate()` |
 | Cache | Redis 7 (exact-match, normalized-query key, 6h TTL) |
 | Chat UI | Vanilla HTML/CSS/JS (`src/static/`, served via `StaticFiles`) — sidebar + localStorage conversation history, visual agent trace panel, no framework, no build step |
 | Container runtime | Docker Compose |
@@ -118,12 +117,12 @@ docker exec rag-airflow airflow dags trigger arxiv_paper_ingestion
 
 ```bash
 # Health-check
-curl http://localhost:8000/api/v1/ping
+curl http://localhost:8000/api/v1/health
 
 # Hybrid retrieval
-curl -X POST http://localhost:8000/api/v1/hybrid_search \
+curl -X POST http://localhost:8000/api/v1/hybrid-search/ \
   -H 'Content-Type: application/json' \
-  -d '{"query": "what is multi-head attention?", "top_k": 5, "use_hybrid": true}'
+  -d '{"query": "what is multi-head attention?", "size": 5, "use_hybrid": true}'
 
 # RAG Q&A (first call slow, second call cached)
 curl -X POST http://localhost:8000/api/v1/ask \
@@ -162,57 +161,6 @@ uv run jupyter notebook notebooks/end-to-end-pipeline.ipynb
 
 The notebook exercises every service in order: fetch → parse → store → chunk → embed → index → search (BM25, vector, hybrid).
 
----
-
-## Evaluation
-
-A 3-stage eval harness lives in [`evals/`](evals/), scored against a 20-case golden set
-(`evals/retrieval_dataset.py`) hand-labeled with real paper/chunk IDs, spanning
-easy/medium/hard difficulty and 5 query types (`factual_lookup`,
-`summarize_main_contribution`, `multi_paper_comparison`, `vague`, `out_of_scope`).
-
-| Stage | Script | What it measures |
-|---|---|---|
-| 1 — Retrieval | `evals/retrieval_eval.py` | BM25 / vector / hybrid, each scored at **paper level** (did the right paper show up?) and **chunk level** (did the exact right passage show up?) via hit / recall / precision / MRR |
-| 3 — Generation | `evals/generation_eval.py` | Real retrieval + the production `GENERATE_ANSWER_PROMPT`, judged by an LLM (`gpt-4o-mini`) for faithfulness, relevance, correctness (cases with a known answer) and abstention (out-of-scope / corpus-gap cases) |
-
-Fast, local, no external tracking — the dev-loop for iterating on retrieval/prompt changes:
-
-```bash
-uv run python evals/retrieval_eval.py                     # all 20 cases, BM25 vs vector vs hybrid
-uv run python evals/retrieval_eval.py --difficulty hard
-uv run python evals/retrieval_eval.py --type factual_lookup
-
-uv run python evals/generation_eval.py                    # faithfulness / relevance / correctness / abstention
-uv run python evals/generation_eval.py --difficulty hard
-```
-
-For a **persistent, comparable** record of a run (needed to answer "did my change actually
-help?" rather than trusting memory), the same two stages are re-implemented against
-[LangSmith](https://smith.langchain.com)'s `aevaluate()`, tagged as named experiments you
-can diff in the UI — including per-query **latency** as a tracked metric alongside quality:
-
-```bash
-uv run python evals/langsmith_setup.py                              # upload/refresh the golden set (run once, or after editing retrieval_dataset.py)
-
-uv run python evals/langsmith_retrieval_eval.py --tag hybrid-baseline-topk3
-uv run python evals/langsmith_generation_eval.py --tag generation-baseline
-```
-
-Both LangSmith scripts import their metric functions and judges directly from the plain
-scripts above (`evals/retrieval_eval.py`, `evals/generation_eval.py`) rather than
-duplicating them — the plain scripts stay the fast local dev-loop, LangSmith scripts add
-tracking on top of the same logic.
-
-**Current baseline** (hybrid RRF, `top_k=3`): paper-level hit rate ~94% (finds the right
-paper reliably, even on hard queries), but chunk-level hit rate only ~18–19% — the
-retriever usually lands in the right paper but not on the exact right passage, which
-caps generation correctness on hard-tier queries. Faithfulness stays at 100% throughout
-(the system doesn't hallucinate — it faithfully answers from whatever context it got,
-even when that context is incomplete). See `docs/arxiv_curator_reference.pdf` for the
-full investigation, including how this was verified against raw chunk ranks rather than
-assumed.
-
 ### Useful URLs
 
 | Service | URL | Auth |
@@ -244,7 +192,6 @@ This repo isn't a clone — a few intentional changes:
 | Project map | None | [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md) (local-only, gitignored) |
 | Conversational memory | Not covered | `AsyncPostgresSaver` checkpointer on the LangGraph agent — per-`thread_id` history, follow-up condensing node |
 | Live paper fetch | Not covered | Agent-invoked tool that queries arXiv live, then downloads/parses/chunks/indexes on demand for papers outside the corpus, routed by a dedicated `tool_router_node` |
-| Eval harness | Not covered | 3-stage golden-set harness (retrieval paper/chunk-level metrics, generation LLM-as-judge), both as a fast local dev-loop and as tracked LangSmith experiments |
 
 The course is the authoritative reference for the curriculum. This repo's refactors are personal preferences for navigation and modularity.
 

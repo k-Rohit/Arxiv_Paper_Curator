@@ -1,13 +1,13 @@
 import os
-from pathlib import Path
 from functools import lru_cache
-from typing import List, Literal, Optional
+from pathlib import Path
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ENV_FILE_PATH = PROJECT_ROOT / ".env"
+
 
 class BaseConfigSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -17,6 +17,7 @@ class BaseConfigSettings(BaseSettings):
         env_nested_delimiter="__",
         case_sensitive=False,
     )
+
 
 class ArxivSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
@@ -50,6 +51,7 @@ class ArxivSettings(BaseConfigSettings):
         os.makedirs(v, exist_ok=True)
         return v
 
+
 class PDFParserSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -63,7 +65,8 @@ class PDFParserSettings(BaseConfigSettings):
     max_file_size_mb: int = 20
     do_ocr: bool = False
     do_table_structure: bool = True
-    
+
+
 class OpenSearchSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -86,6 +89,7 @@ class OpenSearchSettings(BaseConfigSettings):
     rrf_pipeline_name: str = "hybrid-rrf-pipeline"
     hybrid_search_size_multiplier: int = 2  # Get k*multiplier for better recall
 
+
 class OpenAIEmbeddingsSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -105,6 +109,7 @@ class OpenAIEmbeddingsSettings(BaseConfigSettings):
     batch_size: int = 100
     max_retries: int = 3
     timeout_seconds: float = 30.0
+
 
 class OpenAIClientSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
@@ -139,6 +144,19 @@ class DeepEvalSettings(BaseConfigSettings):
     synthesizer_model: str = "gpt-4o-mini"
 
 
+class PineconeSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="PINECONE_",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    api_key: str = ""
+    index_name: str = "arxiv-papers"
+
+
 class RedisSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -159,14 +177,14 @@ class RedisSettings(BaseConfigSettings):
     # Cache settings
     ttl_hours: int = 6  # Cache TTL in hours
 
+
 class Settings(BaseConfigSettings):
-    
     postgres_database_url: str = "postgresql+psycopg2://rag_user:rag_password@localhost:5432/rag_db"
-    checkpoint_database_url: str = "postgresql://rag_user:rag_password@localhost:5432/rag_db" # adding a new variable for checkpoint database url as langgraph requires a different format
-    postgres_echo_sql: bool = False    # set True to log every SQL statement (great for debugging)
-    postgres_pool_size: int = 20       # number of long-lived connections in the pool
-    postgres_max_overflow: int = 0     # extra connections allowed beyond pool_size
-    
+    checkpoint_database_url: str = "postgresql://rag_user:rag_password@localhost:5432/rag_db"  # adding a new variable for checkpoint database url as langgraph requires a different format
+    postgres_echo_sql: bool = False  # set True to log every SQL statement (great for debugging)
+    postgres_pool_size: int = 20  # number of long-lived connections in the pool
+    postgres_max_overflow: int = 0  # extra connections allowed beyond pool_size
+
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
     opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
@@ -174,7 +192,9 @@ class Settings(BaseConfigSettings):
     openai_client: OpenAIClientSettings = Field(default_factory=OpenAIClientSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     deepeval: DeepEvalSettings = Field(default_factory=DeepEvalSettings)
-    
+    pinecone_: PineconeSettings = Field(default_factory=PineconeSettings)
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()

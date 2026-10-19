@@ -155,6 +155,11 @@ class PineconeSettings(BaseConfigSettings):
 
     api_key: str = ""
     index_name: str = "arxiv-papers"
+    sparse_model: str = "pinecone-sparse-english-v0"
+    embed_batch_size: int = 96  # max inputs per pc.inference.embed call for the sparse model
+    dimension: int = 1024  # must equal OpenAIEmbeddingsSettings.dimensions, or every upsert is rejected
+    cloud: str = "aws"
+    region: str = "us-east-1"
 
 
 class RedisSettings(BaseConfigSettings):

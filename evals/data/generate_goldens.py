@@ -4,7 +4,9 @@ from deepeval.synthesizer import Synthesizer
 from deepeval.synthesizer.config import EvolutionConfig
 from deepeval.synthesizer.types import Evolution
 from dotenv import load_dotenv
+
 from evals.eval_utils import load_context
+from src.config import get_settings
 
 load_dotenv()
 
@@ -27,7 +29,7 @@ def generate_goldens() -> None:
         },
     )
 
-    synthesizer = Synthesizer(model="gpt-4o-mini", evolution_config=evolution_config)
+    synthesizer = Synthesizer(model=get_settings().deepeval.synthesizer_model, evolution_config=evolution_config)
     goldens = synthesizer.generate_goldens_from_contexts(contexts=contexts, max_goldens_per_context=2)
     print(f"Generated {len(goldens)} goldens")
 

@@ -105,7 +105,7 @@ class OpenAIEmbeddingsSettings(BaseConfigSettings):
     batch_size: int = 100
     max_retries: int = 3
     timeout_seconds: float = 30.0
-    
+
 class OpenAIClientSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -125,6 +125,19 @@ class OpenAIClientSettings(BaseConfigSettings):
     top_p: float = 1.0
     timeout_seconds: float = 30.0
     max_retries: int = 3
+
+
+class DeepEvalSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="DEEPEVAL__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    synthesizer_model: str = "gpt-4o-mini"
+
 
 class RedisSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
@@ -160,6 +173,7 @@ class Settings(BaseConfigSettings):
     openai_embeddings: OpenAIEmbeddingsSettings = Field(default_factory=OpenAIEmbeddingsSettings)
     openai_client: OpenAIClientSettings = Field(default_factory=OpenAIClientSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    deepeval: DeepEvalSettings = Field(default_factory=DeepEvalSettings)
     
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

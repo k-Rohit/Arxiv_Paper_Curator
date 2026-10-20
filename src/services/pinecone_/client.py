@@ -4,11 +4,18 @@ Dense vectors come from the caller (our OpenAI embedder) so chunks and queries s
 Sparse (keyword) vectors are generated here by Pinecone's hosted sparse model.
 """
 
+import math
 from functools import cached_property
 
 from pinecone import Pinecone, ServerlessSpec
 
 from src.config import PineconeSettings
+
+
+def normalize(values: list[float]) -> list[float]:
+    """Scale a vector to length 1."""
+    norm = math.sqrt(sum(v * v for v in values)) or 1.0  # `or 1.0` avoids dividing by zero
+    return [v / norm for v in values]
 
 
 class PineconeClient:
@@ -60,7 +67,7 @@ class PineconeClient:
                 {
                     "id": chunk["chunk_id"],
                     "values": dense,
-                    "sparse_values": {"indices": sparse["sparse_indices"], "values": sparse["sparse_values"]},
+                    "sparse_values": {"indices": sparse["sparse_indices"], "values": normalize(sparse["sparse_values"])},
                     # Pinecone rejects None in metadata, hence `or ""`
                     "metadata": {
                         "arxiv_id": chunk["arxiv_id"],
@@ -82,7 +89,7 @@ class PineconeClient:
             vector=[v * alpha for v in query_embedding],
             sparse_vector={
                 "indices": sparse["sparse_indices"],
-                "values": [v * (1 - alpha) for v in sparse["sparse_values"]],
+                "values": [v * (1 - alpha) for v in normalize(sparse["sparse_values"])],
             },
             top_k=top_k,
             include_metadata=True,

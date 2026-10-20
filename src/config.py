@@ -1,6 +1,7 @@
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -142,6 +143,9 @@ class DeepEvalSettings(BaseConfigSettings):
     )
 
     synthesizer_model: str = "gpt-4o-mini"
+    top_k: int = 5  # chunks retrieved per golden; keep equal to AskRequest.top_k so evals match the app
+    max_concurrent: int = 5  # goldens answered in parallel when building the evaluation dataset
+    retriever: Literal["pinecone", "opensearch"] = "pinecone"
 
 
 class PineconeSettings(BaseConfigSettings):

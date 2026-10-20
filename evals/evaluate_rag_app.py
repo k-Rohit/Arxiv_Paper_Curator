@@ -15,6 +15,7 @@ from deepeval.evaluate.configs import DisplayConfig
 from evals.component_evals.generator_metrics import generator_metrics
 from evals.component_evals.retriever_metrics import retriever_metrics
 from evals.eval_utils import build_test_cases
+from src.config import get_settings
 
 REPORTS_DIR = Path(__file__).parent / "reports"
 
@@ -31,12 +32,15 @@ def evaluate_rag_app(component: Component = "all"):
     else:
         raise ValueError(f"Unknown component {component!r} — use 'all', 'retriever' or 'generator'")
 
-    test_cases = build_test_cases()
-    print(f"Evaluating {component}: {len(test_cases)} test cases × {len(metrics)} metrics")
+    settings = get_settings().deepeval
+    test_cases = build_test_cases(settings.retriever)
+    print(f"Evaluating {component} on {settings.retriever}: {len(test_cases)} test cases × {len(metrics)} metrics")
 
     return evaluate(
         test_cases=test_cases,
         metrics=metrics,
+        identifier=f"{settings.retriever}_{component}",
+        hyperparameters={"retriever": settings.retriever, "top_k": settings.top_k},
         display_config=DisplayConfig(file_type="md", file_output_dir=str(REPORTS_DIR)),
     )
 

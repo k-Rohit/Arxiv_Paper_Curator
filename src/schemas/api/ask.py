@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,15 +12,15 @@ class AskRequest(BaseModel):
         min_length=1,
         max_length=1000,
     )
-    top_k: Optional[int] = Field(
+    top_k: int | None = Field(
         5,
         description="Number of top relevant documents to retrieve for answering the query.",
         ge=1,
         le=10,
     )
     use_hybrid: bool = Field(True, description="Use hybrid search (BM25 + vector)")
-    categories: Optional[List[str]] = Field(None, description="Filter by arxiv categories")
-    thread_id: Optional[str] = Field(
+    categories: list[str] | None = Field(None, description="Filter by arxiv categories")
+    thread_id: str | None = Field(
         None,
         description="Client-generated conversation id. Stamped as session_id on the "
         "LangSmith trace so all turns of one chat group into a single Thread.",
@@ -43,10 +43,10 @@ class AskResponse(BaseModel):
 
     query: str = Field(..., description="Original user question")
     answer: str = Field(..., description="Generated answer from LLM")
-    sources: List[str] = Field(..., description="PDF URLs of source papers")
+    sources: list[str] = Field(..., description="PDF URLs of source papers")
     chunks_used: int = Field(..., description="Number of chunks used for generation")
     search_mode: str = Field(..., description="Search mode used: bm25 or hybrid")
-    run_id: Optional[str] = Field(None, description="LangSmith run ID — pass to /feedback to rate this answer")
+    run_id: str | None = Field(None, description="LangSmith run ID — pass to /feedback to rate this answer")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -71,11 +71,11 @@ class AgenticAskResponse(AskResponse):
     Existing `sources: List[str]` field stays for backward compatibility.
     """
 
-    sources_detailed: List[Dict[str, Any]] = Field(
+    sources_detailed: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Rich source citations (arxiv_id, title, authors, url, relevance_score).",
     )
-    reasoning_steps: List[str] = Field(
+    reasoning_steps: list[str] = Field(
         default_factory=list,
         description="Ordered list of what the agent did (guardrail, retrieve, grade, generate).",
     )

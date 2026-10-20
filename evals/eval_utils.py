@@ -11,7 +11,8 @@ DATA_DIR = Path(__file__).parent / "data"
 GOLDENS_DIR = DATA_DIR / "goldens"
 EVALUATION_DIR = DATA_DIR / "evaluation"
 
-def load_context(max_papers: int = 5, chunks_per_paper = 3) -> list[list[str]]:
+
+def load_context(max_papers: int = 5, chunks_per_paper=3) -> list[list[str]]:
     db = make_database()
     os_client = make_opensearch_client()
     with db.get_session() as session:
@@ -24,21 +25,24 @@ def load_context(max_papers: int = 5, chunks_per_paper = 3) -> list[list[str]]:
         contexts.extend([[text] for text in good[:chunks_per_paper]])
     return contexts
 
+
 def latest_goldens_file() -> Path:
     files = list(GOLDENS_DIR.glob("*.json"))
     if not files:
         raise FileNotFoundError(f"No goldens in {GOLDENS_DIR} — run generate_goldens first")
     return max(files)
 
-def load_latest_eval_dataset() -> list[dict]:
-    files = list(EVALUATION_DIR.glob("*.json"))
+
+def load_latest_eval_dataset(retriever: str) -> list[dict]:
+    files = list(EVALUATION_DIR.glob(f"{retriever}_*.json"))
     if not files:
         raise FileNotFoundError(f"No evaluation dataset in {EVALUATION_DIR} — run generate_evaluation_dataset file first")
-    latest_file =  max(files)
+    latest_file = max(files)
     with open(latest_file) as file:
         return json.load(file)
 
-def build_test_cases() -> list[LLMTestCase]:
+
+def build_test_cases(retriever: str) -> list[LLMTestCase]:
     """Turn the latest evaluation dataset into DeepEval test cases (one per golden)."""
     return [
         LLMTestCase(
@@ -47,5 +51,5 @@ def build_test_cases() -> list[LLMTestCase]:
             expected_output=case["expected_output"],
             retrieval_context=case["retrieval_context"],
         )
-        for case in load_latest_eval_dataset()
+        for case in load_latest_eval_dataset(retriever)
     ]

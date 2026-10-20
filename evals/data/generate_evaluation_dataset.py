@@ -11,33 +11,42 @@ Run from the repo root:  uv run python -m evals.data.generate_evaluation_dataset
 """
 
 import asyncio
+from datetime import datetime
 from pathlib import Path
 
 from deepeval.dataset import EvaluationDataset, Golden
 
 from evals.eval_utils import latest_goldens_file
+from src.config import get_settings
 from src.services.embeddings.factory import make_openai_embeddings_client
 from src.services.openai_.factory import make_openai_client
+from src.services.opensearch.client import OpenSearchClient
 from src.services.opensearch.factory import make_opensearch_client
+from src.services.pinecone_.client import PineconeClient
+from src.services.pinecone_.factory import make_pinecone_client
 
 DATA_DIR = Path(__file__).parent
 EVALUATION_DIR = DATA_DIR / "evaluation"
-TOP_K = 5
-MAX_CONCURRENT = 5
 
 
-async def answer_golden(golden: Golden, opensearch, embedder, llm, semaphore: asyncio.Semaphore) -> None:
+def retrieve(query: str, client: OpenSearchClient | PineconeClient, retriever: str, query_embedding: list[float]) -> list[dict]:
+    top_k = get_settings().deepeval.top_k
+    if retriever == "pinecone":
+        return client.search(query, query_embedding, top_k=top_k)
+    return client.search_unified(
+        query,
+        query_embedding,
+        size=top_k,
+        from_=0,
+        use_hybrid=True,
+        min_score=0.0,
+    ).get("hits", [])
+
+
+async def answer_golden(golden: Golden, client, embedder, llm, retriever, semaphore: asyncio.Semaphore) -> None:
     async with semaphore:
         query_embedding = await embedder.embed_text(golden.input)
-        results = opensearch.search_unified(
-            query=golden.input,
-            query_embedding=query_embedding,
-            size=TOP_K,
-            from_=0,
-            use_hybrid=True,
-            min_score=0.0,
-        )
-        hits = results.get("hits", [])
+        hits = retrieve(golden.input, client=client, retriever=retriever, query_embedding=query_embedding)
         chunks = [{"arxiv_id": h.get("arxiv_id", ""), "chunk_text": h.get("chunk_text", h.get("abstract", ""))} for h in hits]
 
         golden.retrieval_context = [c["chunk_text"] for c in chunks]
@@ -55,14 +64,16 @@ async def main() -> None:
     dataset.add_goldens_from_json_file(str(goldens_file))
     print(f"Loaded {len(dataset.goldens)} goldens from {goldens_file}")
 
-    opensearch = make_opensearch_client()
+    retriever = get_settings().deepeval.retriever
+    client = make_pinecone_client() if retriever == "pinecone" else make_opensearch_client()
     embedder = make_openai_embeddings_client()
     llm = make_openai_client()
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+    semaphore = asyncio.Semaphore(get_settings().deepeval.max_concurrent)
 
-    await asyncio.gather(*(answer_golden(g, opensearch, embedder, llm, semaphore) for g in dataset.goldens))
+    await asyncio.gather(*(answer_golden(g, client, embedder, llm, retriever, semaphore) for g in dataset.goldens))
 
-    path = dataset.save_as(file_type="json", directory=str(EVALUATION_DIR))
+    filename = f"{retriever}_{datetime.now():%Y%m%d_%H%M%S}"
+    path = dataset.save_as(file_type="json", directory=str(EVALUATION_DIR), file_name=filename)
     print(f"Saved evaluation dataset to {path}")
 
 

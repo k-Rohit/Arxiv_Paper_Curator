@@ -3,11 +3,6 @@
 Goldens come out of the synthesizer with `input`, `expected_output` and `context`.
 This script fills `actual_output` (our answer) and `retrieval_context` (the chunks we
 retrieved), which is everything the DeepEval metrics need.
-
-Mirrors src/routers/ask.py (embed → hybrid search → LLM) but skips the Redis cache and
-keeps the chunk texts, which AskResponse throws away.
-
-Run from the repo root:  uv run python -m evals.data.generate_evaluation_dataset
 """
 
 import asyncio

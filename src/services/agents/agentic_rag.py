@@ -1,36 +1,35 @@
 import logging
 
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from src.services.embeddings.openai_client import OpenAIEmbeddingsClient
-from src.services.openai_ import OpenAIClient
-from src.services.opensearch.client import OpenSearchClient
-from src.services.metadata_fetcher import MetadataFetcher
 from src.services.indexing.hybrid_indexer import HybridIndexingService
-
-from langchain_core.messages import HumanMessage, AIMessage
+from src.services.metadata_fetcher import MetadataFetcher
+from src.services.openai_ import OpenAIClient
+from src.services.pinecone_.client import PineconeClient
 
 from .config import GraphConfig
 from .context import Context
 from .nodes import (
-    select_tool,
+    ainvoke_condense_followup,
     ainvoke_generate_answer,
     ainvoke_grade_retrieved_chunks,
     ainvoke_out_of_scope_step,
-    initiate_retrieve,
+    finalize_live_fetch,
     initiate_live_fetch,
+    initiate_retrieve,
     rewrite_query,
     route,
-    score_user_query,
-    ainvoke_condense_followup,
-    translate_query_for_arxiv,
-    route_after_tool_selection,
     route_after_tool,
-    finalize_live_fetch
+    route_after_tool_selection,
+    score_user_query,
+    select_tool,
+    translate_query_for_arxiv,
 )
 from .state import AgentState
-from .tools import create_retriever_tool, create_live_fetch_tool
+from .tools import create_live_fetch_tool, create_retriever_tool
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class AgenticRag:
 
     def __init__(
         self,
-        opensearch: OpenSearchClient,
+        pinecone: PineconeClient,
         openaiembeddings: OpenAIEmbeddingsClient,
         openai_: OpenAIClient,
         graph_config: GraphConfig,
@@ -54,7 +53,7 @@ class AgenticRag:
     ):
         """Initialize agentic RAG service.
 
-        :param opensearch:              Client for document search
+        :param pinecone:              Client for document search
         :param openaiembeddings:        Client for embeddings
         :param openai_:                 OpenAI client for generation
         :param graph_config:            Configuration for graph execution
@@ -63,18 +62,17 @@ class AgenticRag:
         :param hybrid_indexing_service: Chunk/embed/index service, used by the live-fetch tool
         :param db_session_factory:      Zero-arg callable returning a DB session context manager
         """
-        self.opensearch       = opensearch
+        self.pinecone = pinecone
         self.openaiembeddings = openaiembeddings
-        self.openai_          = openai_
-        self.graph_config     = graph_config
-        self.checkpointer     = checkpointer
+        self.openai_ = openai_
+        self.graph_config = graph_config
+        self.checkpointer = checkpointer
         self.metadata_fetcher = metadata_fetcher
         self.hybrid_indexing_service = hybrid_indexing_service
-        self.db_session_factory      = db_session_factory
+        self.db_session_factory = db_session_factory
         logger.info("Initializing AgenticRAGService with configuration:")
         logger.info(f"  Model:                  {self.graph_config.model}")
         logger.info(f"  Top-k:                  {self.graph_config.top_k}")
-        logger.info(f"  Hybrid search:          {self.graph_config.use_hybrid}")
         logger.info(f"  Max retrieval attempts: {self.graph_config.max_retrieval_attempts}")
         logger.info(f"  Guardrail threshold:    {self.graph_config.guardrail_threshold}")
 
@@ -88,10 +86,9 @@ class AgenticRag:
 
         # Tool the LLM calls to retrieve chunks
         retriever_tool = create_retriever_tool(
-            opensearch_client=self.opensearch,
+            pinecone_client=self.pinecone,
             embeddings_client=self.openaiembeddings,
             top_k=self.graph_config.top_k,
-            use_hybrid=self.graph_config.use_hybrid,
         )
         live_fetch_tool = create_live_fetch_tool(
             metadata_fetcher=self.metadata_fetcher,
@@ -103,17 +100,17 @@ class AgenticRag:
 
         logger.info("Adding nodes to workflow graph")
         workflow.add_node("condense_followup_node", ainvoke_condense_followup)
-        workflow.add_node("guardrail_node",       score_user_query)
-        workflow.add_node("retrieve_node",        initiate_retrieve)
-        workflow.add_node("out_of_scope_node",    ainvoke_out_of_scope_step)
-        workflow.add_node("tool_retrieve",        ToolNode(tools))
-        workflow.add_node("grade_document_node",  ainvoke_grade_retrieved_chunks)
-        workflow.add_node("rewrite_query_node",   rewrite_query)
+        workflow.add_node("guardrail_node", score_user_query)
+        workflow.add_node("retrieve_node", initiate_retrieve)
+        workflow.add_node("out_of_scope_node", ainvoke_out_of_scope_step)
+        workflow.add_node("tool_retrieve", ToolNode(tools))
+        workflow.add_node("grade_document_node", ainvoke_grade_retrieved_chunks)
+        workflow.add_node("rewrite_query_node", rewrite_query)
         workflow.add_node("generate_answer_node", ainvoke_generate_answer)
-        workflow.add_node('translate_query_node', translate_query_for_arxiv)
-        workflow.add_node('tool_router_node', select_tool)
-        workflow.add_node('live_fetch_call_node',initiate_live_fetch)
-        workflow.add_node('live_fetch_preprocess_node',finalize_live_fetch)
+        workflow.add_node("translate_query_node", translate_query_for_arxiv)
+        workflow.add_node("tool_router_node", select_tool)
+        workflow.add_node("live_fetch_call_node", initiate_live_fetch)
+        workflow.add_node("live_fetch_preprocess_node", finalize_live_fetch)
 
         logger.info("Configuring graph edges and routing logic")
 
@@ -121,30 +118,32 @@ class AgenticRag:
         # START → condense_followup if there are multiple human messages, otherwise skip to guardrail
         workflow.add_edge(START, "condense_followup_node")
         workflow.add_edge("condense_followup_node", "guardrail_node")
-        
+
         # guardrail → retrieve OR out_of_scope
         workflow.add_conditional_edges(
             "guardrail_node",
             route,
             {
-                "continue":     "tool_router_node",
+                "continue": "tool_router_node",
                 "out_of_scope": "out_of_scope_node",
             },
         )
 
         # out_of_scope → END
         workflow.add_edge("out_of_scope_node", END)
-        
-        workflow.add_conditional_edges('tool_router_node',
-                                       route_after_tool_selection,
-                                    {
-                                    "retrieve_node" : "retrieve_node",
-                                    "translate_query_node": "translate_query_node", 
-                                    })
+
+        workflow.add_conditional_edges(
+            "tool_router_node",
+            route_after_tool_selection,
+            {
+                "retrieve_node": "retrieve_node",
+                "translate_query_node": "translate_query_node",
+            },
+        )
         # live fetch path: translate the topic → build the tool call → run it
-        workflow.add_edge("translate_query_node","live_fetch_call_node")
-        workflow.add_edge("live_fetch_call_node","tool_retrieve")
-        
+        workflow.add_edge("translate_query_node", "live_fetch_call_node")
+        workflow.add_edge("live_fetch_call_node", "tool_retrieve")
+
         # after the fetch → search the papers we just indexed, then answer from their
         # actual content. Going straight to generate_answer_node would leave the LLM
         # with only the fetch summary (titles + counts) and no paper text or sources.
@@ -156,7 +155,7 @@ class AgenticRag:
             tools_condition,
             {
                 "tools": "tool_retrieve",
-                END:     END,
+                END: END,
             },
         )
 
@@ -165,7 +164,7 @@ class AgenticRag:
             "tool_retrieve",
             route_after_tool,
             {
-                "grade_document_node":        "grade_document_node",
+                "grade_document_node": "grade_document_node",
                 "live_fetch_preprocess_node": "live_fetch_preprocess_node",
             },
         )
@@ -176,7 +175,7 @@ class AgenticRag:
             lambda state: state.get("routing_decision", "generate_answer"),
             {
                 "generate_answer": "generate_answer_node",
-                "rewrite_query":   "rewrite_query_node",
+                "rewrite_query": "rewrite_query_node",
             },
         )
 
@@ -223,28 +222,28 @@ class AgenticRag:
 
         # Initial state — every AgentState field explicitly set
         state_input: AgentState = {
-            "messages":              [HumanMessage(content=query)],
-            "retrieval_attempts":    0,
-            "guardrail_result":      None,
-            "routing_decision":      None,
-            "grading_results":       [],
-            "original_query":        None,
-            "rewritten_query":       None,
-            "sources":               None,
-            "relevant_sources":      [],
+            "messages": [HumanMessage(content=query)],
+            "retrieval_attempts": 0,
+            "guardrail_result": None,
+            "routing_decision": None,
+            "grading_results": [],
+            "original_query": None,
+            "rewritten_query": None,
+            "sources": None,
+            "relevant_sources": [],
             "relevant_tool_artefacts": None,
-            "metadata":              {"user_id": user_id},
-            "tool_selection":         None,
-            "target_topic":           None,
-            "arxiv_search_query":     None,
+            "metadata": {"user_id": user_id},
+            "tool_selection": None,
+            "target_topic": None,
+            "arxiv_search_query": None,
             "live_fetch_topic_label": None,
-            "live_fetch_attempted":   False,
-            "live_fetch_log":         [],
+            "live_fetch_attempted": False,
+            "live_fetch_log": [],
         }
 
         # Runtime dependencies bundled for every node
         runtime_context = Context(
-            opensearch_client=self.opensearch,
+            pinecone_client=self.pinecone,
             embeddings_client=self.openaiembeddings,
             openai_client=self.openai_,
             graph_config=self.graph_config,
@@ -255,12 +254,12 @@ class AgenticRag:
         result = await self.graph.ainvoke(state_input, context=runtime_context, config=config)
 
         return {
-            "query":              query,
-            "answer":             self._extract_answer(result),
-            "sources":            self._extract_sources(result),
-            "reasoning_steps":    self._extract_reasoning_steps(result),
+            "query": query,
+            "answer": self._extract_answer(result),
+            "sources": self._extract_sources(result),
+            "reasoning_steps": self._extract_reasoning_steps(result),
             "retrieval_attempts": result.get("retrieval_attempts", 0),
-            "grading_results":    result.get("grading_results", []),
+            "grading_results": result.get("grading_results", []),
         }
 
     @staticmethod
@@ -278,22 +277,22 @@ class AgenticRag:
         """
         sources = []
         relevant_sources = result.get("relevant_sources", [])
-        
+
         for source in relevant_sources:
-            if hasattr(source,"to_dict"):
+            if hasattr(source, "to_dict"):
                 sources.append(source.to_dict())
-            elif isinstance(source,dict):
+            elif isinstance(source, dict):
                 sources.append(source)
-        
+
         return sources
-    
+
     @staticmethod
     def _extract_reasoning_steps(result: dict) -> list[str]:
         """Extract reasoning steps from graph result."""
         steps = []
         retrieval_attempts = result.get("retrieval_attempts", 0)
-        guardrail_result   = result.get("guardrail_result")
-        grading_results    = result.get("grading_results", [])
+        guardrail_result = result.get("guardrail_result")
+        grading_results = result.get("grading_results", [])
 
         if guardrail_result:
             steps.append(f"Validated query scope (score: {guardrail_result.score}/100)")
@@ -334,13 +333,13 @@ class AgenticRag:
         """
         drawers = {
             "mermaid": lambda g: g.draw_mermaid(),
-            "png":     lambda g: g.draw_mermaid_png(),
-            "ascii":   lambda g: g.draw_ascii(),
+            "png": lambda g: g.draw_mermaid_png(),
+            "ascii": lambda g: g.draw_ascii(),
         }
         if format not in drawers:
             raise ValueError(f"Unknown format {format!r}. Use one of: {list(drawers)}")
 
-        logger.info(f"Generating graph visualization:")
+        logger.info("Generating graph visualization:")
         try:
             output = drawers[format](self.graph.get_graph())
             if save_to:

@@ -18,8 +18,6 @@ class AskRequest(BaseModel):
         ge=1,
         le=10,
     )
-    use_hybrid: bool = Field(True, description="Use hybrid search (BM25 + vector)")
-    categories: list[str] | None = Field(None, description="Filter by arxiv categories")
     thread_id: str | None = Field(
         None,
         description="Client-generated conversation id. Stamped as session_id on the "
@@ -31,7 +29,6 @@ class AskRequest(BaseModel):
             "example": {
                 "query": "What are transformers in machine learning?",
                 "top_k": 3,
-                "use_hybrid": True,
                 "categories": ["cs.AI", "cs.LG"],
             }
         }

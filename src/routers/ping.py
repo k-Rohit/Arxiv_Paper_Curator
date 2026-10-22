@@ -1,23 +1,25 @@
-# ping.py is the health check endpoing for the API
+# ping.py is the health check endpoint for the API
 
 from fastapi import APIRouter
 from sqlalchemy import text
-from ..dependencies import DatabaseDep, OpenSearchDep, SettingsDep
+
+from ..dependencies import DatabaseDep, PineconeDep, SettingsDep
 from ..schemas.api.health import HealthResponse, ServiceStatus
 
 router = APIRouter()
 
+
 @router.get("/health", response_model=HealthResponse, tags=["Health"])
-def health(settings: SettingsDep, database: DatabaseDep, opensearch_client: OpenSearchDep) -> HealthResponse:
+def health(settings: SettingsDep, database: DatabaseDep, pinecone: PineconeDep) -> HealthResponse:
     """
-    Health check — verifies Postgres + OpenSearch connectivity.
+    Health check — verifies Postgres + Pinecone connectivity.
 
     :returns: Service health status with version and connectivity checks
     :rtype: HealthResponse
     """
     services = {}
     overall_status = "ok"
-    
+
     # Postgres
     try:
         with database.get_session() as session:
@@ -26,41 +28,19 @@ def health(settings: SettingsDep, database: DatabaseDep, opensearch_client: Open
     except Exception as e:
         services["postgres"] = ServiceStatus(status="unhealthy", message=str(e))
         overall_status = "degraded"
-    
-    # Opensearch 
+
+    # Pinecone — one stats call proves the connection works and shows how much is indexed
     try:
-        if opensearch_client.health_check():
-            stats = opensearch_client.get_index_stats()
-            services["opensearch"] = ServiceStatus(
-                status="healthy",
-                message=f"{stats.get('document_count', 0)} documents indexed"
-            )
-        else:
-            services["opensearch"] = ServiceStatus(status="unhealthy", message="Not responding")
-            overall_status = "degraded"
+        vector_count = pinecone.index.describe_index_stats().total_vector_count
+        services["pinecone"] = ServiceStatus(status="healthy", message=f"{vector_count} chunks indexed")
     except Exception as e:
-        services["opensearch"] = ServiceStatus(status="unhealthy", message=str(e))
+        services["pinecone"] = ServiceStatus(status="unhealthy", message=str(e))
         overall_status = "degraded"
-        
+
     return HealthResponse(
-    status=overall_status,
-    version="0.1.0",
-    environment="dev",
-    service_name="rag-api",
-    services=services
+        status=overall_status,
+        version="0.1.0",
+        environment="dev",
+        service_name="rag-api",
+        services=services,
     )
-
-
-    
-        
-    
-    
-    
-    
-    
-    
-    
-    
-
-
-    

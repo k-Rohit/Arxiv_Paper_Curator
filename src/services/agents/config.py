@@ -1,6 +1,9 @@
-from typing import Any, Dict
+from typing import Any
+
 from pydantic import BaseModel, Field
+
 from src.config import Settings, get_settings
+
 
 class GraphConfig(BaseModel):
     """Configuration for the entire graph execution.
@@ -13,7 +16,6 @@ class GraphConfig(BaseModel):
     :param model: Default model to use for LLM calls (e.g., "llama3.2:1b")
     :param temperature: Temperature for LLM generation (0.0 = deterministic)
     :param top_k: Number of documents to retrieve from search
-    :param use_hybrid: Whether to use hybrid search (BM25 + vector)
     :param enable_tracing: Whether to enable Langfuse tracing
     :param enable_live_fetch: Whether the agent may fetch new papers from arXiv on demand
     :param live_fetch_max_results: Max papers to pull per live fetch (each costs a PDF download + parse)
@@ -26,9 +28,7 @@ class GraphConfig(BaseModel):
     model: str = "gpt-4o-mini"
     temperature: float = 0.0
     top_k: int = 3
-    use_hybrid: bool = True
     enable_live_fetch: bool = True
     live_fetch_max_results: int = 3
-    metadata: Dict[str, Any] = {}
+    metadata: dict[str, Any] = {}
     settings: Settings = Field(default_factory=get_settings)
-

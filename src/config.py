@@ -68,29 +68,6 @@ class PDFParserSettings(BaseConfigSettings):
     do_table_structure: bool = True
 
 
-class OpenSearchSettings(BaseConfigSettings):
-    model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
-        env_prefix="OPENSEARCH__",
-        extra="ignore",
-        frozen=True,
-        case_sensitive=False,
-    )
-
-    host: str = "http://localhost:9200"
-    index_name: str = "arxiv-papers"
-    chunk_index_suffix: str = "chunks"  # Creates single hybrid index: {index_name}-{suffix}
-    max_text_size: int = 1000000
-
-    # Vector search settings
-    vector_dimension: int = 1024  # Jina embeddings dimension
-    vector_space_type: str = "cosinesimil"  # cosinesimil, l2, innerproduct
-
-    # Hybrid search settings
-    rrf_pipeline_name: str = "hybrid-rrf-pipeline"
-    hybrid_search_size_multiplier: int = 2  # Get k*multiplier for better recall
-
-
 class OpenAIEmbeddingsSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -103,7 +80,6 @@ class OpenAIEmbeddingsSettings(BaseConfigSettings):
     # Read OPENAI_API_KEY directly (no prefix) — that's the standard env var name.
     api_key: str = Field(
         default="",
-        validation_alias=AliasChoices("OPENAI_API_KEY", "OPENAI_EMBEDDINGS__API_KEY"),
     )
     model: str = "text-embedding-3-small"
     dimensions: int = 1024
@@ -196,7 +172,6 @@ class Settings(BaseConfigSettings):
 
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
-    opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
     openai_embeddings: OpenAIEmbeddingsSettings = Field(default_factory=OpenAIEmbeddingsSettings)
     openai_client: OpenAIClientSettings = Field(default_factory=OpenAIClientSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

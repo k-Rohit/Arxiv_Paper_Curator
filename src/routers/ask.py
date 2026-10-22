@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
 
-from src.dependencies import CacheDep, EmbeddingsDep, LLMDep, OpenSearchDep
+from src.dependencies import CacheDep, EmbeddingsDep, LLMDep, PineconeDep
 from src.schemas.api.ask import AskRequest, AskResponse
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ router = APIRouter(tags=["ask"])
 
 def _trace_inputs(inputs: dict) -> dict:
     """Record only the request payload in LangSmith — the injected DI clients
-    (opensearch, embedder, llm, cache) aren't serializable and pollute the trace."""
+    (pinecone, embedder, llm, cache) aren't serializable and pollute the trace."""
     req = inputs.get("request")
     if req is not None and hasattr(req, "model_dump"):
         return req.model_dump(exclude_none=True)
@@ -27,7 +27,7 @@ def _trace_inputs(inputs: dict) -> dict:
 @traceable(name="ask_request", run_type="chain", process_inputs=_trace_inputs)
 async def ask(
     request: AskRequest,
-    opensearch: OpenSearchDep,
+    pinecone: PineconeDep,
     embedder: EmbeddingsDep,
     llm: LLMDep,
     cache: CacheDep,
@@ -35,8 +35,8 @@ async def ask(
     """Answer a question grounded in retrieved arXiv paper chunks.
 
     0. Check exact-match cache; return cached answer if present.
-    1. Embed the user query (for hybrid search).
-    2. Retrieve top-K relevant chunks from OpenSearch.
+    1. Embed the user query.
+    2. Retrieve top-K relevant chunks from Pinecone.
     3. Build a prompt with chunks as context, call the LLM.
     4. Store the response in cache and return.
     """
@@ -52,36 +52,22 @@ async def ask(
         if cached is not None:
             return cached
 
-    # 1. Embed the query if hybrid search is requested
-    query_embedding = None
-    search_mode = "bm25"
-    if request.use_hybrid:
-        try:
-            query_embedding = await embedder.embed_text(request.query)
-            search_mode = "hybrid"
-        except Exception as e:
-            logger.warning(f"Embedding failed, falling back to BM25: {e}")
+    try:
+        query_embedding = await embedder.embed_text(request.query)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Embedding failed: {e}") from e
 
     # 2. Retrieve top-K chunks
     logger.info(f"Retrieving top {request.top_k} chunks for query: '{request.query[:60]}'")
-    search_results = opensearch.search_unified(
-        query=request.query,
-        query_embedding=query_embedding,
-        size=request.top_k,
-        from_=0,
-        categories=request.categories,
-        use_hybrid=request.use_hybrid and query_embedding is not None,
-        min_score=0.0,
-    )
+    hits = pinecone.search(query=request.query, query_embedding=query_embedding, top_k=request.top_k)
 
-    hits = search_results.get("hits", [])
     if not hits:
         raise HTTPException(status_code=404, detail="No relevant papers found for this query.")
 
     # 3. Build chunks for the LLM (minimal payload — text + arxiv_id only)
     chunks_for_llm = [
         {
-            "arxiv_id":   hit.get("arxiv_id", ""),
+            "arxiv_id": hit.get("arxiv_id", ""),
             "chunk_text": hit.get("chunk_text", hit.get("abstract", "")),
         }
         for hit in hits
@@ -92,7 +78,7 @@ async def ask(
         rag_result = await llm.generate_rag_response(query=request.query, chunks=chunks_for_llm)
     except Exception as e:
         logger.error(f"LLM generation failed: {e}")
-        raise HTTPException(status_code=502, detail=f"LLM generation failed: {e}")
+        raise HTTPException(status_code=502, detail=f"LLM generation failed: {e}") from e
 
     # 5. Build the response — extract unique source URLs from hits
     sources = list({hit.get("pdf_url", "") for hit in hits if hit.get("pdf_url")})
@@ -102,8 +88,8 @@ async def ask(
         answer=rag_result.get("answer", ""),
         sources=sources,
         chunks_used=len(hits),
-        search_mode=search_mode,
-        run_id=run_id
+        search_mode="hybrid",
+        run_id=run_id,
     )
 
     # 6. Store in cache for next time (fire-and-forget; cache failures don't break the response)

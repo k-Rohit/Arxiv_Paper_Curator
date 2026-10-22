@@ -3,7 +3,6 @@
 import hashlib
 import json
 import logging
-from typing import Optional
 
 import redis
 
@@ -17,26 +16,24 @@ class CacheClient:
     """Redis-based exact-match cache for RAG queries."""
 
     def __init__(self, redis_client: redis.Redis, settings: RedisSettings) -> None:
-        self.redis    = redis_client
+        self.redis = redis_client
         self.settings = settings
         self.ttl_seconds = settings.ttl_hours * 3600
 
     def _generate_cache_key(self, request: AskRequest) -> str:
         """Generate exact cache key based on request parameters."""
         key_data = {
-            "query":      request.query.strip().lower(),
-            "top_k":      request.top_k,
-            "use_hybrid": request.use_hybrid,
-            "categories": sorted(request.categories) if request.categories else [],
+            "query": request.query.strip().lower(),
+            "top_k": request.top_k,
         }
         key_string = json.dumps(key_data, sort_keys=True)
-        key_hash   = hashlib.sha256(key_string.encode()).hexdigest()[:16]
+        key_hash = hashlib.sha256(key_string.encode()).hexdigest()[:16]
         return f"exact_cache:{key_hash}"
 
-    async def find_cached_response(self, request: AskRequest) -> Optional[AskResponse]:
+    async def find_cached_response(self, request: AskRequest) -> AskResponse | None:
         """Return cached response if present, else None."""
         try:
-            cache_key       = self._generate_cache_key(request)
+            cache_key = self._generate_cache_key(request)
             cached_response = self.redis.get(cache_key)
 
             if not cached_response:
@@ -58,7 +55,7 @@ class CacheClient:
         """Store response for exact query matching."""
         try:
             cache_key = self._generate_cache_key(request)
-            success   = self.redis.set(
+            success = self.redis.set(
                 cache_key,
                 response.model_dump_json(),
                 ex=self.ttl_seconds,

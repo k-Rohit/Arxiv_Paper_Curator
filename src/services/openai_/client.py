@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from langsmith import traceable
 from openai import AsyncOpenAI
@@ -42,11 +42,11 @@ class OpenAIClient:
         return response.choices[0].message.content.strip()
 
     @traceable(name="generate_rag_response", run_type="llm")
-    async def generate_rag_response(self, query: str, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def generate_rag_response(self, query: str, chunks: list[dict[str, Any]]) -> dict[str, Any]:
         """End-to-end RAG generation: build prompt → call LLM → parse response.
 
         :param query: User's question
-        :param chunks: Retrieved chunks (from OpenSearch)
+        :param chunks: Retrieved chunks (from Pinecone)
         :returns: Dict matching RAGResponse shape (answer, sources, citations, confidence)
         """
         system_prompt = self.prompt_builder.system_prompt
@@ -57,7 +57,7 @@ class OpenAIClient:
 
         return self.response_parser.parse_structured_response(raw_text)
 
-    async def generate_structured_rag_response(self, query: str, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def generate_structured_rag_response(self, query: str, chunks: list[dict[str, Any]]) -> dict[str, Any]:
         """RAG generation with OpenAI's JSON-mode for structured output.
 
         Uses `response_format={"type": "json_object"}` so the LLM is forced to

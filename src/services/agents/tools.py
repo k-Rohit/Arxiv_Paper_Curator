@@ -8,28 +8,22 @@ from src.repositories.paper import PaperRepository
 from src.services.embeddings.openai_client import OpenAIEmbeddingsClient
 from src.services.indexing.hybrid_indexer import HybridIndexingService
 from src.services.metadata_fetcher import MetadataFetcher
-from src.services.opensearch.client import OpenSearchClient
+from src.services.pinecone_.client import PineconeClient
 
 logger = logging.getLogger(__name__)
 
-def create_retriever_tool(
-    opensearch_client: OpenSearchClient,
-    embeddings_client: OpenAIEmbeddingsClient,
-    top_k: int = 3,
-    use_hybrid: bool = True
-):
-    """Create a retriever tool that wraps OpenSearch service.
 
-    :param opensearch_client: Existing OpenSearch service
-    :param embeddings_client: Existing Jina embeddings service
+def create_retriever_tool(pinecone_client: PineconeClient, embeddings_client: OpenAIEmbeddingsClient, top_k: int = 3):
+    """Create a retriever tool that wraps Pinecone hybrid (sparse + dense) search.
+
+    :param pinecone_client: Existing Pinecone service
+    :param embeddings_client: Existing OpenAI embeddings service
     :param top_k: Number of chunks to retrieve
-    :param use_hybrid: Use hybrid search (BM25 + vector)
     :returns: LangChain tool for retrieving papers
     """
-    
+
     @tool(response_format="content_and_artifact")
     async def retrieve_papers(query: str) -> tuple[str, list[Document]]:
-
         """Search and return relevant arXiv research papers.
 
         Use this tool when the user asks about:
@@ -44,40 +38,34 @@ def create_retriever_tool(
             :returns: List of relevant paper excerpts with metadata
         """
         logger.info(f"Retrieving papers for the query: {query[:100]}")
-        logger.debug(f"Search mode: {'hybrid' if use_hybrid else 'bm25'}, top_k: {top_k}")
-        
+        logger.debug(f"top_k: {top_k}")
+
         # Generate query embeddings
         logger.debug("Generating query embedding")
         query_embeddings = await embeddings_client.embed_text(text=query)
         logger.debug(f"Generated embedding with {len(query_embeddings)} dimensions")
-        
-        # Search using OpenSearch
-        logger.debug("Searching OpenSearch")
-        search_results = opensearch_client.search_unified(
-            query=query,
-            query_embedding=query_embeddings,
-            size=top_k,
-            use_hybrid=use_hybrid
-        )
-        
-        # Convert SearchHit to Langchain Document
+
+        # Search using Pinecone
+        logger.debug("Searching Pinecone")
+        hits = pinecone_client.search(query=query, query_embedding=query_embeddings, top_k=top_k)
+
+        # Convert Pinecone hits to LangChain Documents
         documents = []
-        hits = search_results.get("hits", [])
-        logger.info(f"Found {len(hits)} documents from OpenSearch")
-        
+        logger.info(f"Found {len(hits)} documents from Pinecone")
+
         for hit in hits:
             doc = Document(
-                page_content=hit['chunk_text'],
-                metadata = {
+                page_content=hit["chunk_text"],
+                metadata={
                     "arxiv_id": hit["arxiv_id"],
-                    "title": hit.get("title",""),
-                    "authors": hit.get("authors",""),
+                    "title": hit.get("title", ""),
+                    "authors": hit.get("authors", ""),
                     "score": hit.get("score", 0.0),
-                    "source": f"https://arxiv.org/pdf/{hit['arxiv_id']}.pdf",
-                    "section": hit.get("section_name",""),
-                    "search_mode": "hybrid" if use_hybrid else "bm25",
-                    "top_k": top_k
-                }
+                    "source": hit.get("pdf_url") or f"https://arxiv.org/pdf/{hit['arxiv_id']}.pdf",
+                    "section": hit.get("section_title", ""),
+                    "search_mode": "hybrid",
+                    "top_k": top_k,
+                },
             )
             documents.append(doc)
         logger.debug(f"Converted {len(documents)} hits to Langchain Documents.")
@@ -96,6 +84,7 @@ def create_retriever_tool(
             for doc in documents
         )
         return content, documents
+
     return retrieve_papers
 
 
@@ -109,11 +98,11 @@ def create_live_fetch_tool(
 
     Fills corpus gaps: the daily Airflow DAG only ingests a fixed window, so a question
     about a topic outside that window has nothing to retrieve. This runs the same
-    fetch -> parse -> store pipeline synchronously, then indexes into OpenSearch so the
+    fetch -> parse -> store pipeline synchronously, then indexes into Pinecone so the
     new papers are immediately searchable.
 
     :param metadata_fetcher:        Ingestion pipeline (arXiv fetch + PDF parse + Postgres)
-    :param hybrid_indexing_service: Long-lived indexer (chunk + embed + OpenSearch)
+    :param hybrid_indexing_service: Long-lived indexer (chunk + embed + Pinecone)
     :param db_session_factory:      Zero-arg callable returning a Session context manager
     :param default_max_results:     Papers to fetch per call when caller doesn't specify
     :returns: LangChain tool for live-fetching papers
@@ -238,6 +227,3 @@ def create_live_fetch_tool(
         return content, artifact
 
     return fetch_live_papers
-        
-        
-    

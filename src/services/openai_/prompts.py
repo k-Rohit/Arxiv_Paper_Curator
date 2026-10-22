@@ -3,7 +3,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -33,11 +33,11 @@ class RAGPromptBuilder:
             )
         return prompt_file.read_text().strip()
 
-    def create_rag_prompt(self, query: str, chunks: List[Dict[str, Any]]) -> str:
+    def create_rag_prompt(self, query: str, chunks: list[dict[str, Any]]) -> str:
         """Create a RAG prompt with query and retrieved chunks.
 
         :param query: User's question
-        :param chunks: List of retrieved chunks with metadata from OpenSearch
+        :param chunks: List of retrieved chunks with metadata from Pinecone
         :returns: Formatted prompt string (USER message — system prompt is separate)
         """
         prompt = "### Context from Papers:\n\n"
@@ -51,13 +51,12 @@ class RAGPromptBuilder:
 
         prompt += f"### Question:\n{query}\n\n"
         prompt += (
-            "### Answer:\nProvide a natural, conversational response (not JSON) "
-            "and cite sources using [arXiv:id] format.\n\n"
+            "### Answer:\nProvide a natural, conversational response (not JSON) and cite sources using [arXiv:id] format.\n\n"
         )
 
         return prompt
 
-    def create_structured_prompt(self, query: str, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def create_structured_prompt(self, query: str, chunks: list[dict[str, Any]]) -> dict[str, Any]:
         """Create a prompt with structured output format for OpenAI.
 
         :param query: User's question
@@ -75,7 +74,7 @@ class ResponseParser:
     """Parser for LLM responses."""
 
     @staticmethod
-    def parse_structured_response(response: str) -> Dict[str, Any]:
+    def parse_structured_response(response: str) -> dict[str, Any]:
         """Parse a structured response from the LLM.
 
         :param response: Raw LLM response string
@@ -89,7 +88,7 @@ class ResponseParser:
             return ResponseParser._extract_json_fallback(response)
 
     @staticmethod
-    def _extract_json_fallback(response: str) -> Dict[str, Any]:
+    def _extract_json_fallback(response: str) -> dict[str, Any]:
         """Extract JSON from response text as fallback.
 
         :param response: Raw response text

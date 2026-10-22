@@ -74,11 +74,17 @@ class PineconeClient:
                         "chunk_text": chunk["chunk_text"],
                         "title": chunk.get("title") or "",
                         "pdf_url": chunk.get("pdf_url") or "",
+                        "authors": chunk.get("authors") or "",
+                        "section_title": chunk.get("section_title") or "",
                     },
                 }
             )
 
         self.index.upsert(vectors=records)
+
+    def delete_paper_chunks(self, arxiv_id: str) -> None:
+        """Delete every chunk of one paper (used before re-indexing it)."""
+        self.index.delete(filter={"arxiv_id": {"$eq": arxiv_id}})
 
     def search(self, query: str, query_embedding: list[float], top_k: int = 5, alpha: float = 0.6) -> list[dict]:
         """Hybrid search. alpha=1.0 → pure meaning (dense), alpha=0.0 → pure keywords (sparse).

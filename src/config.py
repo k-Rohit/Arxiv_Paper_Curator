@@ -166,9 +166,9 @@ class RedisSettings(BaseConfigSettings):
 class Settings(BaseConfigSettings):
     postgres_database_url: str = "postgresql+psycopg2://rag_user:rag_password@localhost:5432/rag_db"
     checkpoint_database_url: str = "postgresql://rag_user:rag_password@localhost:5432/rag_db"  # adding a new variable for checkpoint database url as langgraph requires a different format
-    postgres_echo_sql: bool = False  # set True to log every SQL statement (great for debugging)
-    postgres_pool_size: int = 20  # number of long-lived connections in the pool
-    postgres_max_overflow: int = 0  # extra connections allowed beyond pool_size
+    postgres_echo_sql: bool = False
+    postgres_pool_size: int = 5  # kept small: Supabase's free-tier pooler allows few connections
+    postgres_max_overflow: int = 0
 
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
